@@ -22,3 +22,49 @@ Lakerfield.RosaCode is a WPF class library that integrates the Monaco Editor int
 ```bash
 dotnet add package Lakerfield.RosaCode
 ```
+
+### Requirements
+
+- .NET 6 or higher
+- WPF project with WebView2
+
+---
+
+## 🛠️ Usage Example
+
+```csharp
+//TODO
+```
+
+More usage examples and customization docs coming soon.
+
+---
+
+## 📦 Project Structure
+
+- `TODO` – TODO
+
+---
+
+## 🧪 Roadmap
+
+- [x] Syntax highlighting
+- [x] Code completions
+- [x] Hover tooltips
+- [x] Signature help
+- [x] Language diagnostics
+- [x] Minimal templating support
+- [x] Format document
+- [ ] ...
+
+---
+
+## 📄 License
+
+Licensed under the [MIT License](LICENSE).
+
+---
+
+## 💬 Feedback & Contributions
+
+Found a bug or want to contribute? [Open an issue](https://github.com/lakerfield/rosacode/issues) or submit a pull request — contributions are welcome!
