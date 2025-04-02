@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Monaco Editor with IntelliSense</title>
+  <title>RosaCode editor</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.2/min/vs/loader.min.js"></script>
   <style>
     html,
@@ -24,9 +24,13 @@
   <div id="editor"></div>
 
   <script>
-    let _editor = undefined;
     let messageCounter = 1;
     const openCalls = [];
+
+    let _originalModel = undefined;
+    let _sourceModel = undefined;
+
+    let _currentEditor = undefined;
 
     let callWpf = async function (method, data) {
       const messageId = messageCounter++;
@@ -62,49 +66,85 @@
 
     let handleMessage = async function (method, data) {
       if (method == "setCode") {
-        _editor.setValue(data);
+        _originalModel.setValue(data);
+        _sourceModel.setValue(data);
       }
 
       if (method == "getCode") {
-        let code = _editor.getValue();
+        let code = _sourceModel.getValue();
         // post to server
       }
 
       if (method == "setMode") {
-        _editor.setValue(data);
+        updateEditorMode(data);
       }
     };
+
+    let updateEditorMode = async function (mode) {
+      let editor = _currentEditor;
+      if (editor)
+        editor.dispose();
+
+      let container = document.getElementById("editor");
+      if (mode != 1) {
+        // create normal editor
+        editor = monaco.editor.create(container, {
+          model: _sourceModel,
+          theme: "vs-dark"
+        });
+      }
+      else {
+        // create diff editor
+        editor = monaco.editor.createDiffEditor(container, {
+          renderSideBySide: true,
+          readOnly: false,
+          originalEditable: false,
+          modifiedEditable: true,
+          automaticLayout: true,
+          theme: 'vs-dark',
+          diffWordWrap: 'on'
+        });
+        editor.setModel({
+          original: _originalModel,
+          modified: _sourceModel,
+        });
+      }
+
+      _currentEditor = editor;
+    }
 
     //https://microsoft.github.io/monaco-editor/docs.html
     require.config({ paths: { vs: "https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.2/min/vs" } });
 
     require(["vs/editor/editor.main"], function () {
-      callWpf("monaco-loaded", {});
-
       monaco.editor.onDidCreateEditor((editorInstance) => {
-        console.log("Monaco Editor has been initialized", editorInstance);
+        //console.log("Monaco Editor has been initialized", editorInstance);
       });
 
-      const editor = monaco.editor.create(document.getElementById("editor"), {
-        value: "",
-        language: "csharp",
+      _originalModel = monaco.editor.createModel("", "csharp");
+      _originalModel.updateOptions({
         tabSize: 2,
-        insertSpaces: true,
-        theme: "vs-dark",
+        insertSpaces: true
       });
+
+      _sourceModel = monaco.editor.createModel("", "csharp");
+      _sourceModel.updateOptions({
+        tabSize: 2,
+        insertSpaces: true
+      });
+
+      updateEditorMode();
 
       window.addEventListener("resize", () => {
-        editor.layout();
+        _currentEditor.layout();
       });
-
-      _editor = editor;
 
       // ✅ Code Completion
       monaco.languages.registerCompletionItemProvider("csharp", {
         triggerCharacters: ["."],
         provideCompletionItems: async function (model, position) {
           let serverSuggestions = await callWpf("completion", {
-            code: JSON.stringify(editor.getValue()),
+            code: JSON.stringify(model.getValue()),
             line: position.lineNumber,
             column: position.column,
           });
@@ -237,7 +277,7 @@
           }));
 
           let serverActions = await callWpf("action", {
-            code: JSON.stringify(editor.getValue()),
+            code: JSON.stringify(model.getValue()),
             line: position.lineNumber,
             column: position.column,
             diagnostics: diagnostics,
@@ -277,7 +317,7 @@
           if (!word) return null;
 
           let serverHover = await callWpf("hover", {
-            code: JSON.stringify(editor.getValue()),
+            code: JSON.stringify(model.getValue()),
             line: position.lineNumber,
             column: position.column,
           });
@@ -295,7 +335,7 @@
       // format document
       monaco.languages.registerDocumentFormattingEditProvider("csharp", {
         provideDocumentFormattingEdits: async function (model, options, token) {
-          const originalCode = JSON.stringify(editor.getValue());
+          const originalCode = JSON.stringify(model.getValue());
           let serverFormat = await callWpf("format", {
             code: originalCode,
             tabSize: options.tabSize,
@@ -325,8 +365,8 @@
 
       // ✅ Diagnostics (Error Checking)
       async function updateDiagnostics() {
-        const model = editor.getModel();
-        let code = editor.getValue();
+        const model = _sourceModel;
+        let code = _sourceModel.getValue();
         let serverDiagnostics = await callWpf("diagnostics", {
           code: JSON.stringify(code),
         });
@@ -345,7 +385,7 @@
 
       const debouncedUpdateDiagnostics = debounce(updateDiagnostics, 1000);
 
-      editor.onDidChangeModelContent(debouncedUpdateDiagnostics); // updateDiagnostics);
+      _sourceModel.onDidChangeContent(debouncedUpdateDiagnostics); // updateDiagnostics);
 
       // ✅ Signature Help (Parameter Hints)
       monaco.languages.registerSignatureHelpProvider("csharp", {
@@ -359,11 +399,11 @@
           });
 
           let serverSignatures = await callWpf("signatures", {
-            code: JSON.stringify(editor.getValue()),
+            code: JSON.stringify(_sourceModel.getValue()),
             line: position.lineNumber,
             column: position.column,
           });
-          console.log(serverSignatures);
+          //console.log(serverSignatures);
 
           return {
             value: serverSignatures,
