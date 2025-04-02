@@ -77,9 +77,16 @@ namespace Lakerfield.RosaCode
       {
         case "action":
           var actionRequest = Deserialize<ActionRequest>(message.Json);
+          try
+          {
           var actions = await GetActionsAsync(Deserialize<string>(actionRequest.Code), actionRequest.Line, actionRequest.Column, actionRequest.Diagnostics);
           var actionResult = new ActionResponse() { Actions = actions };
           PostWebMessage(message.Id, message.Method, Serialize(actionResult));
+          }
+          catch (ArgumentOutOfRangeException)
+          {
+            //TODO: fix flow, do not use "old" diagnostics with new code
+          }
           break;
 
         case "completion":
