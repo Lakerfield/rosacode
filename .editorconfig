@@ -1,0 +1,35 @@
+# EditorConfig is awesome: https://EditorConfig.org
+
+# top-most EditorConfig file
+root = true
+
+[*]
+charset = utf-8
+end_of_line = crlf
+
+#https://stackoverflow.com/questions/68227746/can-i-force-a-non-exhaustive-c-sharp-switch-expression-to-cause-a-compile-error
+dotnet_diagnostic.CS8509.severity = error
+
+# Primary constructor preferences
+csharp_style_prefer_primary_constructors = false:error
+
+[*.{cs,fs}]
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.csproj]
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.json]
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[.dockerignore]
+end_of_line = lf
