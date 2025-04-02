@@ -32,7 +32,7 @@ namespace Lakerfield.RosaCode.Playground
           }
         }
         """);
-
+      
       _ = editor.InitializeEditor(engine);
     }
 
@@ -44,14 +44,24 @@ namespace Lakerfield.RosaCode.Playground
         editor.Mode = RosaCodeMode.Normal;
     }
 
-    private void GetCodeClick(object sender, RoutedEventArgs e)
+    private async void GetCodeClick(object sender, RoutedEventArgs e)
     {
-
+      MessageBox.Show(await editor.GetCode());
     }
 
     private void SetCodeClick(object sender, RoutedEventArgs e)
     {
+      editor.SetCode("""
+        using System;
 
+        public class MyNewClass()
+        {
+          public void Say()
+          {
+            Console.WriteLine("Hi!");
+          }
+        }
+        """);
     }
   }
 }

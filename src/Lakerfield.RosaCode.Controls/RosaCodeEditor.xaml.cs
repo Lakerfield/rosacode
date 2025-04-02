@@ -79,9 +79,9 @@ namespace Lakerfield.RosaCode
           var actionRequest = Deserialize<ActionRequest>(message.Json);
           try
           {
-          var actions = await GetActionsAsync(Deserialize<string>(actionRequest.Code), actionRequest.Line, actionRequest.Column, actionRequest.Diagnostics);
-          var actionResult = new ActionResponse() { Actions = actions };
-          PostWebMessage(message.Id, message.Method, Serialize(actionResult));
+            var actions = await GetActionsAsync(Deserialize<string>(actionRequest.Code), actionRequest.Line, actionRequest.Column, actionRequest.Diagnostics);
+            var actionResult = new ActionResponse() { Actions = actions };
+            PostWebMessage(message.Id, message.Method, Serialize(actionResult));
           }
           catch (ArgumentOutOfRangeException)
           {
@@ -130,7 +130,17 @@ namespace Lakerfield.RosaCode
 
     private async void WebViewNavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
     {
-      PostWebMessage(-1, "setCode", Serialize(await CodeEditor.GetCode()));
+      SetCode(await CodeEditor.GetCode());
+    }
+
+    public Task<string> GetCode()
+    {
+      return CodeEditor.GetCode();
+    }
+
+    public void SetCode(string code)
+    {
+      PostWebMessage(-1, "setCode", Serialize(code));
     }
 
 
