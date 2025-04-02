@@ -1,12 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Monaco Editor with IntelliSense</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.2/min/vs/loader.min.js"></script>
   <style>
-    html, body {
+    html,
+    body {
       height: 100%;
       margin: 0;
       display: flex;
@@ -20,7 +21,6 @@
   </style>
 </head>
 <body>
-
   <div id="editor"></div>
 
   <script>
@@ -28,8 +28,7 @@
     let messageCounter = 1;
     const openCalls = [];
 
-    let callWpf = async function (method, data)
-    {
+    let callWpf = async function (method, data) {
       const messageId = messageCounter++;
 
       const messagePromise = new Promise((resolve, reject) => {
@@ -39,19 +38,18 @@
       });
 
       return messagePromise;
-    }
+    };
 
-    window.chrome.webview.addEventListener("message", event => {
+    window.chrome.webview.addEventListener("message", (event) => {
       const message = event.data; //messageId, method, json
       let jsonObject = JSON.parse(message.json);
-      if (message.id < 0)
-      {
-        handleMessage(message.method, jsonObject)
+      if (message.id < 0) {
+        handleMessage(message.method, jsonObject);
         return;
       }
 
       // Find the corresponding call by messageId
-      let callIndex = openCalls.findIndex(call => call.id === message.id);
+      let callIndex = openCalls.findIndex((call) => call.id === message.id);
       if (callIndex !== -1) {
         let call = openCalls[callIndex];
         openCalls.splice(callIndex, 1);
@@ -62,8 +60,7 @@
       console.error("unhandled message", message.method, message, event);
     });
 
-    let handleMessage = async function (method, data)
-    {
+    let handleMessage = async function (method, data) {
       if (method == "setCode") {
         _editor.setValue(data);
       }
@@ -76,13 +73,12 @@
       if (method == "setMode") {
         _editor.setValue(data);
       }
-    }
+    };
 
     //https://microsoft.github.io/monaco-editor/docs.html
-    require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.2/min/vs' } });
+    require.config({ paths: { vs: "https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.2/min/vs" } });
 
     require(["vs/editor/editor.main"], function () {
-
       callWpf("monaco-loaded", {});
 
       monaco.editor.onDidCreateEditor((editorInstance) => {
@@ -94,24 +90,23 @@
         language: "csharp",
         tabSize: 2,
         insertSpaces: true,
-        theme: "vs-dark"
+        theme: "vs-dark",
       });
 
-      window.addEventListener('resize', () => {
+      window.addEventListener("resize", () => {
         editor.layout();
       });
 
       _editor = editor;
 
       // ✅ Code Completion
-      monaco.languages.registerCompletionItemProvider('csharp',
-      {
-        triggerCharacters: ['.'],
+      monaco.languages.registerCompletionItemProvider("csharp", {
+        triggerCharacters: ["."],
         provideCompletionItems: async function (model, position) {
           let serverSuggestions = await callWpf("completion", {
             code: JSON.stringify(editor.getValue()),
             line: position.lineNumber,
-            column: position.column
+            column: position.column,
           });
 
           let suggestions = serverSuggestions.reduce((acc, item) => {
@@ -198,14 +193,14 @@
                 break;
 
               default:
-                console.log("fallback to text", rawKind)
+                console.log("fallback to text", rawKind);
                 rawKind = "Text"; // Fallback for unrecognized kinds
                 break;
             }
 
             let kind = monaco.languages.CompletionItemKind[rawKind];
             if (kind === undefined) {
-                console.log("undefined", item);
+              console.log("undefined", item);
               return acc;
             }
 
@@ -215,73 +210,68 @@
               insertText: item.insertText,
               insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
               documentation: item.documentation,
-              detail: item.tags && item.tags.includes("Snippet") ? "(snippet)" : undefined
+              detail: item.tags && item.tags.includes("Snippet") ? "(snippet)" : undefined,
             });
 
             return acc;
           }, []);
 
           return {
-            suggestions: suggestions
+            suggestions: suggestions,
           };
-                }
-            });
+        },
+      });
 
-            // Register CodeActionProvider
-            monaco.languages.registerCodeActionProvider('csharp', {
-                provideCodeActions: async function (model, range, context, token) {
-                    const position = range.getStartPosition();
-                    const markers = monaco.editor.getModelMarkers({ resource: model.uri });
-                    const diagnostics = markers.map(m => ({
-                        message: m.message,
-                        startLineNumber: m.startLineNumber,
-                        startColumn: m.startColumn,
-                        endLineNumber: m.endLineNumber,
-                        endColumn: m.endColumn,
-                        severity: monaco.MarkerSeverity.toString(m.severity).toLowerCase()
-                    }));
+      // Register CodeActionProvider
+      monaco.languages.registerCodeActionProvider("csharp", {
+        provideCodeActions: async function (model, range, context, token) {
+          const position = range.getStartPosition();
+          const markers = monaco.editor.getModelMarkers({ resource: model.uri });
+          const diagnostics = markers.map((m) => ({
+            message: m.message,
+            startLineNumber: m.startLineNumber,
+            startColumn: m.startColumn,
+            endLineNumber: m.endLineNumber,
+            endColumn: m.endColumn,
+            severity: monaco.MarkerSeverity.toString(m.severity).toLowerCase(),
+          }));
 
-                    let serverActions = await callWpf("action", {
-                        code: JSON.stringify(editor.getValue()),
-                        line: position.lineNumber,
-                        column: position.column,
-                        diagnostics: diagnostics
-                    });
+          let serverActions = await callWpf("action", {
+            code: JSON.stringify(editor.getValue()),
+            line: position.lineNumber,
+            column: position.column,
+            diagnostics: diagnostics,
+          });
 
-                    const monacoActions = serverActions.actions.map(action => ({
-                        title: action.title,
-                        kind: action.kind,
-                        diagnostics: action.diagnostics.map(d => ({
-                            message: d.message,
-                            range: new monaco.Range(d.startLineNumber, d.startColumn, d.endLineNumber, d.endColumn),
-                            severity: monaco.MarkerSeverity[d.severity.charAt(0).toUpperCase() + d.severity.slice(1)]
-                        })),
-                        isPreferred: action.isPreferred,
-                        edit: {
-                            edits: action.edit.edits.map(edit => ({
-                                resource: model.uri,
-                                textEdit: {
-                                    range: new monaco.Range(
-                                        edit.range.startLineNumber,
-                                        edit.range.startColumn,
-                                        edit.range.endLineNumber,
-                                        edit.range.endColumn
-                                    ),
-                                    text: edit.text
-                                }
-                            }))
-                        }
-                    }));
+          const monacoActions = serverActions.actions.map((action) => ({
+            title: action.title,
+            kind: action.kind,
+            diagnostics: action.diagnostics.map((d) => ({
+              message: d.message,
+              range: new monaco.Range(d.startLineNumber, d.startColumn, d.endLineNumber, d.endColumn),
+              severity: monaco.MarkerSeverity[d.severity.charAt(0).toUpperCase() + d.severity.slice(1)],
+            })),
+            isPreferred: action.isPreferred,
+            edit: {
+              edits: action.edit.edits.map((edit) => ({
+                resource: model.uri,
+                textEdit: {
+                  range: new monaco.Range(edit.range.startLineNumber, edit.range.startColumn, edit.range.endLineNumber, edit.range.endColumn),
+                  text: edit.text,
+                },
+              })),
+            },
+          }));
 
-                    return {
-                        actions: monacoActions,
-                        dispose: () => { }
-                    };
-        }
+          return {
+            actions: monacoActions,
+            dispose: () => { },
+          };
+        },
       });
 
       // ✅ Hover Tooltips
-      monaco.languages.registerHoverProvider('csharp', {
+      monaco.languages.registerHoverProvider("csharp", {
         provideHover: async function (model, position) {
           const word = model.getWordAtPosition(position);
           if (!word) return null;
@@ -289,63 +279,59 @@
           let serverHover = await callWpf("hover", {
             code: JSON.stringify(editor.getValue()),
             line: position.lineNumber,
-            column: position.column
+            column: position.column,
           });
 
           if (serverHover?.tooltip) {
             return {
               range: new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column + word.word.length),
-              contents: [
-                { value: serverHover.tooltip },
-              ]
+              contents: [{ value: serverHover.tooltip }],
             };
           }
           return null;
-        }
+        },
       });
 
+      // format document
+      monaco.languages.registerDocumentFormattingEditProvider("csharp", {
+        provideDocumentFormattingEdits: async function (model, options, token) {
+          const originalCode = JSON.stringify(editor.getValue());
+          let serverFormat = await callWpf("format", {
+            code: originalCode,
+            tabSize: options.tabSize,
+            insertSpaces: options.insertSpaces,
+          });
 
-            // format document
-            monaco.languages.registerDocumentFormattingEditProvider('csharp', {
-                provideDocumentFormattingEdits: async function (model, options, token) {
-                    const originalCode = JSON.stringify(editor.getValue());
-                    let serverFormat = await callWpf("format", {
-                        code: originalCode,
-                        tabSize: options.tabSize,
-                        insertSpaces: options.insertSpaces
-                    });
+          if (token.isCancellationRequested) {
+            return {
+              value: [],
+              dispose: () => { },
+            };
+          }
 
-                    if (token.isCancellationRequested) {
-                        return {
-                            value: [],
-                            dispose: () => { }
-                        };
-                    }
+          const edit = {
+            range: model.getFullModelRange(),
+            text: serverFormat.format,
+          };
 
-                    const edit = {
-                        range: model.getFullModelRange(),
-                        text: serverFormat.format
-                    };
+          model.applyEdits([edit]);
 
-                    model.applyEdits([edit]);
-
-                    return {
-                        value: [edit],
-                        dispose: () => { }
-                    };
-                }
-            });
-
+          return {
+            value: [edit],
+            dispose: () => { },
+          };
+        },
+      });
 
       // ✅ Diagnostics (Error Checking)
       async function updateDiagnostics() {
         const model = editor.getModel();
         let code = editor.getValue();
         let serverDiagnostics = await callWpf("diagnostics", {
-          code: JSON.stringify(code)
+          code: JSON.stringify(code),
         });
 
-        monaco.editor.setModelMarkers(model, 'owner', serverDiagnostics.errors);
+        monaco.editor.setModelMarkers(model, "owner", serverDiagnostics.errors);
         return;
       }
 
@@ -359,34 +345,33 @@
 
       const debouncedUpdateDiagnostics = debounce(updateDiagnostics, 1000);
 
-      editor.onDidChangeModelContent(debouncedUpdateDiagnostics);// updateDiagnostics);
+      editor.onDidChangeModelContent(debouncedUpdateDiagnostics); // updateDiagnostics);
 
       // ✅ Signature Help (Parameter Hints)
-      monaco.languages.registerSignatureHelpProvider('csharp', {
-                signatureHelpTriggerCharacters: ['(', ',', ';'],
-                provideSignatureHelp: async function (model, position, token) {
-                    const textUntilPosition = model.getValueInRange({
-                        startLineNumber: 1,
-                        startColumn: 1,
-                        endLineNumber: position.lineNumber,
-                        endColumn: position.column
-                    });
+      monaco.languages.registerSignatureHelpProvider("csharp", {
+        signatureHelpTriggerCharacters: ["(", ",", ";"],
+        provideSignatureHelp: async function (model, position, token) {
+          const textUntilPosition = model.getValueInRange({
+            startLineNumber: 1,
+            startColumn: 1,
+            endLineNumber: position.lineNumber,
+            endColumn: position.column,
+          });
 
           let serverSignatures = await callWpf("signatures", {
             code: JSON.stringify(editor.getValue()),
             line: position.lineNumber,
-            column: position.column
+            column: position.column,
           });
           console.log(serverSignatures);
 
           return {
             value: serverSignatures,
-            dispose: () => { }
+            dispose: () => { },
           };
-        }
+        },
       });
     });
   </script>
-
 </body>
 </html>
