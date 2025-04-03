@@ -15,16 +15,16 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
     - name: Fetch all history for all tags and branches
       run: git fetch --prune --unshallow
     - name: Install GitVersion
-      uses: gittools/actions/gitversion/setup@v0.9.11
+      uses: gittools/actions/gitversion/setup@v3.2.0
       with:
           versionSpec: '5.8.x'
     - name: Use GitVersion
       id: gitversion # step id used as reference for output values
-      uses: gittools/actions/gitversion/execute@v0.9.11
+      uses: gittools/actions/gitversion/execute@v3.2.0
     - run: |
         echo "Major: ${{ steps.gitversion.outputs.major }}" >> $GITHUB_OUTPUT
         echo "Minor: ${{ steps.gitversion.outputs.minor }}" >> $GITHUB_OUTPUT
@@ -57,7 +57,7 @@ jobs:
         echo "CommitsSinceVersionSourcePadded: ${{ steps.gitversion.outputs.commitsSinceVersionSourcePadded }}" >> $GITHUB_OUTPUT
         echo "CommitDate: ${{ steps.gitversion.outputs.commitDate }}" >> $GITHUB_OUTPUT
     - name: Setup .NET Core
-      uses: actions/setup-dotnet@v1
+      uses: actions/setup-dotnet@v4.3.1
       with:
         dotnet-version: 8.0.401
     - name: Install dependencies
