@@ -20,6 +20,7 @@ namespace Lakerfield.RosaCode.Playground
     {
       InitializeComponent();
 
+      DataContext = new MainViewModel();
 
       var engine = new RosaCodeRoslynEngine("test", """
         using System;

@@ -6,10 +6,12 @@
         xmlns:local="clr-namespace:Lakerfield.RosaCode.Playground"
         xmlns:rosa="clr-namespace:Lakerfield.RosaCode;assembly=Lakerfield.RosaCode.Controls"
         mc:Ignorable="d"
-        Title="RosaCode playground" Height="640" Width="1200">
+        Title="RosaCode playground" Height="800" Width="1200">
   <Grid>
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto"></RowDefinition>
+      <RowDefinition Height="*"></RowDefinition>
+      <RowDefinition Height="*"></RowDefinition>
       <RowDefinition Height="*"></RowDefinition>
     </Grid.RowDefinitions>
     <StackPanel Orientation="Horizontal">
@@ -17,6 +19,8 @@
       <Button Content="Get Code" Click="GetCodeClick"></Button>
       <Button Content="Set Code" Click="SetCodeClick"></Button>
     </StackPanel>
-    <rosa:RosaCodeEditor x:Name="editor" Grid.Row="1"></rosa:RosaCodeEditor>
+    <rosa:RosaCodeEditor x:Name="editor" Text="{Binding Code, UpdateSourceTrigger=Default}" Grid.Row="1"></rosa:RosaCodeEditor>
+    <TextBox Text="{Binding Code}" AcceptsReturn="True" Grid.Row="2"></TextBox>
+    <TextBox Text="{Binding Code, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" Grid.Row="3"></TextBox>
   </Grid>
 </Window>

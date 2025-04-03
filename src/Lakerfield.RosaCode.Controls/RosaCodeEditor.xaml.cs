@@ -45,6 +45,8 @@ namespace Lakerfield.RosaCode
     public RosaCodeEditor()
     {
       InitializeComponent();
+
+      LostFocus += OnLostFocus;
     }
 
     public async Task InitializeEditor(IRosaCodeEngine codeEditor, bool openDevTools = false)
@@ -130,7 +132,9 @@ namespace Lakerfield.RosaCode
 
     private async void WebViewNavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
     {
-      SetCode(await CodeEditor.GetCode());
+      var engine = CodeEditor;
+      if (engine != null)
+        SetCode(await engine.GetCode());
     }
 
     public Task<string> GetCode()
@@ -175,6 +179,8 @@ namespace Lakerfield.RosaCode
 
     private async Task<DiagnosticsResponse> GetDiagnosticsAsync(string code)
     {
+      HandleInternalTextChanged(code);
+
       var diagnostics = await CodeEditor.GetDiagnostics(code);
 
       var result = new DiagnosticsResponse();
@@ -248,6 +254,92 @@ namespace Lakerfield.RosaCode
       using StreamReader reader = new StreamReader(stream);
 
       return reader.ReadToEnd();
+    }
+
+
+
+
+    private bool _suppressTextChangedCallback;
+    private string _pendingText;
+
+    public string Text
+    {
+      get => (string)GetValue(TextProperty);
+      set => SetValue(TextProperty, value);
+    }
+
+    public static readonly DependencyProperty TextProperty =
+        DependencyProperty.Register(
+            nameof(Text),
+            typeof(string),
+            typeof(RosaCodeEditor),
+            new FrameworkPropertyMetadata(
+                string.Empty,
+                FrameworkPropertyMetadataOptions.BindsTwoWayByDefault,
+                OnTextChanged));
+
+    private static void OnTextChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+      var control = (RosaCodeEditor)d;
+
+      control.OnTextChanged((string)e.OldValue, (string)e.NewValue);
+    }
+
+    protected virtual void OnTextChanged(string oldValue, string newValue)
+    {
+      _pendingText = newValue;
+
+      if (!_suppressTextChangedCallback)
+        SetCode(newValue);
+    }
+
+    public void HandleInternalTextChanged(string newText)
+    {
+      var bindingExpr = BindingOperations.GetBindingExpression(this, TextProperty);
+      var trigger = bindingExpr?.ParentBinding?.UpdateSourceTrigger ?? UpdateSourceTrigger.Default;
+
+      if (trigger == UpdateSourceTrigger.PropertyChanged)
+      {
+        _suppressTextChangedCallback = true;
+        try
+        {
+          SetValue(TextProperty, newText); // Still propagates to binding
+        }
+        finally
+        {
+          _suppressTextChangedCallback = false;
+        }
+      }
+      else if (trigger == UpdateSourceTrigger.LostFocus || trigger == UpdateSourceTrigger.Default)
+      {
+        _pendingText = newText;
+      }
+      else if (trigger == UpdateSourceTrigger.Explicit)
+      {
+        _pendingText = newText;
+      }
+    }
+
+    private void OnLostFocus(object sender, RoutedEventArgs e)
+    {
+      var bindingExpr = BindingOperations.GetBindingExpression(this, TextProperty);
+      var trigger = bindingExpr?.ParentBinding?.UpdateSourceTrigger ?? UpdateSourceTrigger.Default;
+
+      if ((trigger == UpdateSourceTrigger.LostFocus || trigger == UpdateSourceTrigger.Default)
+          && _pendingText != Text)
+      {
+        SetCurrentValue(TextProperty, _pendingText);
+      }
+    }
+
+    public void CommitTextToBinding()
+    {
+      var bindingExpr = BindingOperations.GetBindingExpression(this, TextProperty);
+      if (bindingExpr != null)
+      {
+        SetCurrentValue(TextProperty, _pendingText);
+        bindingExpr.UpdateSource();
+      }
     }
 
   }
