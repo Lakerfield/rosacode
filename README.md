@@ -49,7 +49,7 @@ More usage examples and customization docs coming soon.
 - [x] Language diagnostics
 - [x] Minimal templating support
 - [x] Format document
-- [ ] Show warnings as warnings instead of errors
+- [x] Show warnings as warnings instead of errors
 - [ ] ...
 
 ---
