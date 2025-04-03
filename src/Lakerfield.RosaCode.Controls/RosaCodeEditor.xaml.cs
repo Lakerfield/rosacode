@@ -25,7 +25,7 @@ namespace Lakerfield.RosaCode
       PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
-    public IRosaCodeEngine CodeEditor { get; private set; }
+    public IRosaCodeEngine Engine { get; private set; }
 
     private RosaCodeMode _mode = RosaCodeMode.Normal;
     public RosaCodeMode Mode
@@ -51,10 +51,10 @@ namespace Lakerfield.RosaCode
 
     public async Task InitializeEditor(IRosaCodeEngine codeEditor, bool openDevTools = false)
     {
-      if (CodeEditor != null)
+      if (Engine != null)
         throw new Exception("RosaCodeEditor.InitializeEditor can only be called one");
 
-      CodeEditor = codeEditor;
+      Engine = codeEditor;
 
       await webView.EnsureCoreWebView2Async();
 
@@ -132,14 +132,14 @@ namespace Lakerfield.RosaCode
 
     private async void WebViewNavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
     {
-      var engine = CodeEditor;
+      var engine = Engine;
       if (engine != null)
         SetCode(await engine.GetCode());
     }
 
     public Task<string> GetCode()
     {
-      return CodeEditor.GetCode();
+      return Engine.GetCode();
     }
 
     public void SetCode(string code)
@@ -151,28 +151,28 @@ namespace Lakerfield.RosaCode
 
     private async Task<IReadOnlyList<ActionAction>> GetActionsAsync(string code, int line, int column, IReadOnlyList<ActionDiagnostic> diagnostics)
     {
-      var actions = await CodeEditor.GetActions(code, line, column, diagnostics);
+      var actions = await Engine.GetActions(code, line, column, diagnostics);
 
       return actions;
     }
 
     private async Task<Completion[]> GetCompletionsAsync(string code, int line, int column)
     {
-      var completions = await CodeEditor.GetCompletions(code, line, column);
+      var completions = await Engine.GetCompletions(code, line, column);
 
       return completions.ToArray();
     }
 
     private async Task<string> GetFormatAsync(string code, int tabSize, bool insertSpaces)
     {
-      var result = await CodeEditor.GetFormattedDocument(code, tabSize, insertSpaces);
+      var result = await Engine.GetFormattedDocument(code, tabSize, insertSpaces);
 
       return result;
     }
 
     private async Task<string> GetHoverAsync(string code, int line, int column)
     {
-      var result = await CodeEditor.GetTooltip(code, line, column);
+      var result = await Engine.GetTooltip(code, line, column);
 
       return result;
     }
@@ -181,7 +181,7 @@ namespace Lakerfield.RosaCode
     {
       HandleInternalTextChanged(code);
 
-      var diagnostics = await CodeEditor.GetDiagnostics(code);
+      var diagnostics = await Engine.GetDiagnostics(code);
 
       var result = new DiagnosticsResponse();
       foreach (var diagnostic in diagnostics)
@@ -201,7 +201,7 @@ namespace Lakerfield.RosaCode
 
     private async Task<SignatureHelpResponse> GetSignaturesAsync(string code, int line, int column)
     {
-      var (signatures, activeSignature, activeParameter) = await CodeEditor.GetSignatures(code, line, column);
+      var (signatures, activeSignature, activeParameter) = await Engine.GetSignatures(code, line, column);
 
       return new SignatureHelpResponse()
       {
