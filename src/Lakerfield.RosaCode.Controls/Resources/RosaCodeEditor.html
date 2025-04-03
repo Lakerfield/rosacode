@@ -15,8 +15,8 @@
     }
 
     #editor {
-      flex-grow: 1;
-      border: 1px solid #ccc;
+          flex-grow: 1;
+          border: 1px solid #ccc;
     }
   </style>
 </head>
@@ -78,7 +78,7 @@
       if (method == "setMode") {
         updateEditorMode(data);
       }
-    };
+      };
 
     let updateEditorMode = async function (mode) {
       let editor = _currentEditor;
@@ -118,7 +118,7 @@
 
     require(["vs/editor/editor.main"], function () {
       monaco.editor.onDidCreateEditor((editorInstance) => {
-        //console.log("Monaco Editor has been initialized", editorInstance);
+          //console.log("Monaco Editor has been initialized", editorInstance);
       });
 
       _originalModel = monaco.editor.createModel("", "csharp");
@@ -371,7 +371,7 @@
           code: JSON.stringify(code),
         });
 
-        monaco.editor.setModelMarkers(model, "owner", serverDiagnostics.errors);
+        monaco.editor.setModelMarkers(model, "owner", mapSeverity(serverDiagnostics.errors));
         return;
       }
 
@@ -381,7 +381,22 @@
           clearTimeout(timer);
           timer = setTimeout(() => func.apply(this, args), delay);
         };
-      }
+        }
+
+        function mapSeverity(diagnostics) {
+            const markers = diagnostics.map(diag => ({
+                message: diag.message,
+                severity: diag.severity === "Hint" ? monaco.MarkerSeverity.Hint :
+                          diag.severity === "Info" ? monaco.MarkerSeverity.Info :
+                          diag.severity === "Warning" ? monaco.MarkerSeverity.Warning :
+                          monaco.MarkerSeverity.Error,
+                startLineNumber: diag.startLineNumber,
+                startColumn: diag.startColumn,
+                endLineNumber: diag.endLineNumber,
+                endColumn: diag.endColumn
+            }));
+            return markers;
+        }
 
       const debouncedUpdateDiagnostics = debounce(updateDiagnostics, 1000);
 
