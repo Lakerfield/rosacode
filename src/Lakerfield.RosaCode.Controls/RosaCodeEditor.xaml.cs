@@ -25,6 +25,8 @@ namespace Lakerfield.RosaCode
       PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
+    private bool _isEditorLoaded = false;
+
     public IRosaCodeEngine Engine { get; private set; }
 
     private RosaCodeMode _mode = RosaCodeMode.Normal;
@@ -132,9 +134,8 @@ namespace Lakerfield.RosaCode
 
     private async void WebViewNavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
     {
-      var engine = Engine;
-      if (engine != null)
-        SetCode(await engine.GetCode());
+      _isEditorLoaded = true;
+      SetCode(_pendingText);
     }
 
     public Task<string> GetCode()
@@ -144,7 +145,10 @@ namespace Lakerfield.RosaCode
 
     public void SetCode(string code)
     {
-      PostWebMessage(-1, "setCode", Serialize(code));
+      if (_isEditorLoaded)
+        PostWebMessage(-1, "setCode", Serialize(code));
+      else
+        _pendingText = code;
     }
 
 
@@ -287,10 +291,15 @@ namespace Lakerfield.RosaCode
 
     protected virtual void OnTextChanged(string oldValue, string newValue)
     {
+      if (_pendingText == newValue)
+        return;
+
       _pendingText = newValue;
 
-      if (!_suppressTextChangedCallback)
-        SetCode(newValue);
+      if (_suppressTextChangedCallback)
+        return;
+
+      SetCode(newValue);
     }
 
     public void HandleInternalTextChanged(string newText)

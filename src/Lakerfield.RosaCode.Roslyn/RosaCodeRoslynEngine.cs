@@ -21,7 +21,7 @@ namespace Lakerfield.RosaCode
     private Document _document;
 
 
-    public RosaCodeRoslynEngine(string name, string code)
+    public RosaCodeRoslynEngine(string name = "default", string code = "")
     {
       _workspace = new AdhocWorkspace();
       //var metadataReferences = GenerateMetadataReferences();

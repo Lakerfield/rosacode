@@ -20,9 +20,9 @@ namespace Lakerfield.RosaCode.Playground
     {
       InitializeComponent();
 
-      DataContext = new MainViewModel();
-
-      var engine = new RosaCodeRoslynEngine("test", """
+      DataContext = new MainViewModel()
+      {
+        Code = """
         using System;
 
         public class Test()
@@ -32,7 +32,10 @@ namespace Lakerfield.RosaCode.Playground
             Console.WriteLine("Hello");
           }
         }
-        """);
+        """
+      };
+
+      var engine = new RosaCodeRoslynEngine();
       
       _ = editor.InitializeEditor(engine);
     }
