@@ -38,7 +38,7 @@ jobs:
     - name: Pack Lakerfield.RosaCode with dotnet
       run: dotnet pack --no-restore --no-build src/Lakerfield.RosaCode/Lakerfield.RosaCode.csproj --output nuget-packages --configuration Release -p:PackageVersion=${{ steps.gitversion.outputs.semVer }}
     - name: Pack Lakerfield.RosaCode.Controls with dotnet
-      run: dotnet pack --no-restore --no-build src/Lakerfield.RosaCode.Controls/Lakerfield.RosaCode.Controls.csproj --output nuget-packages --configuration Release -p:PackageVersion=${{ steps.gitversion.outputs.semVer }}
+      run: dotnet pack --no-restore --no-build src/Lakerfield.RosaCode.Controls/Lakerfield.RosaCode.Controls.csproj --output nuget-packages --configuration Release -p:PackageVersion=${{ steps.gitversion.outputs.semVer }} -p:EnableWindowsTargeting=true
     - name: Pack with dotnet
       run: dotnet pack --no-restore --no-build src/Lakerfield.RosaCode.Roslyn/Lakerfield.RosaCode.Roslyn.csproj --output nuget-packages --configuration Release -p:PackageVersion=${{ steps.gitversion.outputs.semVer }}
     - name: Push with dotnet
