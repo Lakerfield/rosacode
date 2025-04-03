@@ -26,36 +26,36 @@ jobs:
       id: gitversion # step id used as reference for output values
       uses: gittools/actions/gitversion/execute@v0.9.11
     - run: |
-        echo "Major: ${{ steps.gitversion.outputs.major }}"
-        echo "Minor: ${{ steps.gitversion.outputs.minor }}"
-        echo "Patch: ${{ steps.gitversion.outputs.patch }}"
-        echo "PreReleaseTag: ${{ steps.gitversion.outputs.preReleaseTag }}"
-        echo "PreReleaseTagWithDash: ${{ steps.gitversion.outputs.preReleaseTagWithDash }}"
-        echo "PreReleaseLabel: ${{ steps.gitversion.outputs.preReleaseLabel }}"
-        echo "PreReleaseNumber: ${{ steps.gitversion.outputs.preReleaseNumber }}"
-        echo "WeightedPreReleaseNumber: ${{ steps.gitversion.outputs.weightedPreReleaseNumber }}"
-        echo "BuildMetaData: ${{ steps.gitversion.outputs.buildMetaData }}"
-        echo "BuildMetaDataPadded: ${{ steps.gitversion.outputs.buildMetaDataPadded }}"
-        echo "FullBuildMetaData: ${{ steps.gitversion.outputs.fullBuildMetaData }}"
-        echo "MajorMinorPatch: ${{ steps.gitversion.outputs.majorMinorPatch }}"
-        echo "SemVer: ${{ steps.gitversion.outputs.semVer }}"
-        echo "LegacySemVer: ${{ steps.gitversion.outputs.legacySemVer }}"
-        echo "LegacySemVerPadded: ${{ steps.gitversion.outputs.legacySemVerPadded }}"
-        echo "AssemblySemVer: ${{ steps.gitversion.outputs.assemblySemVer }}"
-        echo "AssemblySemFileVer: ${{ steps.gitversion.outputs.assemblySemFileVer }}"
-        echo "FullSemVer: ${{ steps.gitversion.outputs.fullSemVer }}"
-        echo "InformationalVersion: ${{ steps.gitversion.outputs.informationalVersion }}"
-        echo "BranchName: ${{ steps.gitversion.outputs.branchName }}"
-        echo "Sha: ${{ steps.gitversion.outputs.sha }}"
-        echo "ShortSha: ${{ steps.gitversion.outputs.shortSha }}"
-        echo "NuGetVersionV2: ${{ steps.gitversion.outputs.nuGetVersionV2 }}"
-        echo "NuGetVersion: ${{ steps.gitversion.outputs.nuGetVersion }}"
-        echo "NuGetPreReleaseTagV2: ${{ steps.gitversion.outputs.nuGetPreReleaseTagV2 }}"
-        echo "NuGetPreReleaseTag: ${{ steps.gitversion.outputs.nuGetPreReleaseTag }}"
-        echo "VersionSourceSha: ${{ steps.gitversion.outputs.versionSourceSha }}"
-        echo "CommitsSinceVersionSource: ${{ steps.gitversion.outputs.commitsSinceVersionSource }}"
-        echo "CommitsSinceVersionSourcePadded: ${{ steps.gitversion.outputs.commitsSinceVersionSourcePadded }}"
-        echo "CommitDate: ${{ steps.gitversion.outputs.commitDate }}"
+        echo "Major: ${{ steps.gitversion.outputs.major }}" >> $GITHUB_OUTPUT
+        echo "Minor: ${{ steps.gitversion.outputs.minor }}" >> $GITHUB_OUTPUT
+        echo "Patch: ${{ steps.gitversion.outputs.patch }}" >> $GITHUB_OUTPUT
+        echo "PreReleaseTag: ${{ steps.gitversion.outputs.preReleaseTag }}" >> $GITHUB_OUTPUT
+        echo "PreReleaseTagWithDash: ${{ steps.gitversion.outputs.preReleaseTagWithDash }}" >> $GITHUB_OUTPUT
+        echo "PreReleaseLabel: ${{ steps.gitversion.outputs.preReleaseLabel }}" >> $GITHUB_OUTPUT
+        echo "PreReleaseNumber: ${{ steps.gitversion.outputs.preReleaseNumber }}" >> $GITHUB_OUTPUT
+        echo "WeightedPreReleaseNumber: ${{ steps.gitversion.outputs.weightedPreReleaseNumber }}" >> $GITHUB_OUTPUT
+        echo "BuildMetaData: ${{ steps.gitversion.outputs.buildMetaData }}" >> $GITHUB_OUTPUT
+        echo "BuildMetaDataPadded: ${{ steps.gitversion.outputs.buildMetaDataPadded }}" >> $GITHUB_OUTPUT
+        echo "FullBuildMetaData: ${{ steps.gitversion.outputs.fullBuildMetaData }}" >> $GITHUB_OUTPUT
+        echo "MajorMinorPatch: ${{ steps.gitversion.outputs.majorMinorPatch }}" >> $GITHUB_OUTPUT
+        echo "SemVer: ${{ steps.gitversion.outputs.semVer }}" >> $GITHUB_OUTPUT
+        echo "LegacySemVer: ${{ steps.gitversion.outputs.legacySemVer }}" >> $GITHUB_OUTPUT
+        echo "LegacySemVerPadded: ${{ steps.gitversion.outputs.legacySemVerPadded }}" >> $GITHUB_OUTPUT
+        echo "AssemblySemVer: ${{ steps.gitversion.outputs.assemblySemVer }}" >> $GITHUB_OUTPUT
+        echo "AssemblySemFileVer: ${{ steps.gitversion.outputs.assemblySemFileVer }}" >> $GITHUB_OUTPUT
+        echo "FullSemVer: ${{ steps.gitversion.outputs.fullSemVer }}" >> $GITHUB_OUTPUT
+        echo "InformationalVersion: ${{ steps.gitversion.outputs.informationalVersion }}" >> $GITHUB_OUTPUT
+        echo "BranchName: ${{ steps.gitversion.outputs.branchName }}" >> $GITHUB_OUTPUT
+        echo "Sha: ${{ steps.gitversion.outputs.sha }}" >> $GITHUB_OUTPUT
+        echo "ShortSha: ${{ steps.gitversion.outputs.shortSha }}" >> $GITHUB_OUTPUT
+        echo "NuGetVersionV2: ${{ steps.gitversion.outputs.nuGetVersionV2 }}" >> $GITHUB_OUTPUT
+        echo "NuGetVersion: ${{ steps.gitversion.outputs.nuGetVersion }}" >> $GITHUB_OUTPUT
+        echo "NuGetPreReleaseTagV2: ${{ steps.gitversion.outputs.nuGetPreReleaseTagV2 }}" >> $GITHUB_OUTPUT
+        echo "NuGetPreReleaseTag: ${{ steps.gitversion.outputs.nuGetPreReleaseTag }}" >> $GITHUB_OUTPUT
+        echo "VersionSourceSha: ${{ steps.gitversion.outputs.versionSourceSha }}" >> $GITHUB_OUTPUT
+        echo "CommitsSinceVersionSource: ${{ steps.gitversion.outputs.commitsSinceVersionSource }}" >> $GITHUB_OUTPUT
+        echo "CommitsSinceVersionSourcePadded: ${{ steps.gitversion.outputs.commitsSinceVersionSourcePadded }}" >> $GITHUB_OUTPUT
+        echo "CommitDate: ${{ steps.gitversion.outputs.commitDate }}" >> $GITHUB_OUTPUT
     - name: Setup .NET Core
       uses: actions/setup-dotnet@v1
       with:
@@ -63,7 +63,7 @@ jobs:
     - name: Install dependencies
       run: dotnet restore
     - name: Build
-      run: dotnet build --configuration Release --no-restore  /p:AssemblyVersion=${{ steps.gitversion.outputs.assemblySemFileVer }} /p:FileVersion=${{ steps.gitversion.outputs.assemblySemFileVer }} /p:InformationalVersion=${{ steps.gitversion.outputs.Sha }}
+      run: dotnet build --configuration Release --no-restore  -p:AssemblyVersion=${{ steps.gitversion.outputs.assemblySemFileVer }} -p:FileVersion=${{ steps.gitversion.outputs.assemblySemFileVer }} -p:InformationalVersion=${{ steps.gitversion.outputs.Sha }} -p:EnableWindowsTargeting=true
     - name: Test
       run: dotnet test --no-restore --verbosity normal
     - name: Pack Lakerfield.RosaCode with dotnet
