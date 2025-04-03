@@ -51,6 +51,7 @@ More usage examples and customization docs coming soon.
 - [x] Format document
 - [x] Show warnings as warnings instead of errors
 - [x] Support Text DependencyProperty
+- [ ] Support for Mode DependencyProperty
 - [ ] ...
 
 ---
