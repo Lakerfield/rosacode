@@ -1,0 +1,31 @@
+<Project>
+  <PropertyGroup>
+    <Company>Lakerfield B.V.</Company>
+    <Copyright>Copyright 2025-present Lakerfield B.V.</Copyright>
+    <Authors>Michael Lakerveld</Authors>
+    <PackageIcon>packageIcon.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageReleaseNotes>https://github.com/lakerfield/rosacode/releases/tag/v$(Version)</PackageReleaseNotes>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageProjectUrl>https://github.com/Lakerfield/rosacode</PackageProjectUrl>
+    <PackageTags>roslyn;monaco;editor;embedded;wpf;c#;dotnet;csharp</PackageTags>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>false</EmbedUntrackedSources>
+    <RepositoryUrl>https://github.com/Lakerfield/rosacode</RepositoryUrl>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.1.1">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\packageIcon.png" Pack="true" PackagePath="" />
+    <None Include="..\..\README.md" Pack="true" PackagePath=""/>
+  </ItemGroup>
+
+</Project>
