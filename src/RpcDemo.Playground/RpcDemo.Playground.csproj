@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <Copyright>Lakerfield B.V.</Copyright>
+    <Company>Lakerfield B.V.</Company>
+    <Authors>Michael Lakerveld</Authors>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Lakerfield.Rpc.SourceGenerator" />
+    <PackageReference Include="Lakerfield.Rpc.WebSocketClient" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <!-- Persist the source generator (and other) files to disk (https://andrewlock.net/creating-a-source-generator-part-6-saving-source-generator-output-in-source-control/) -->
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <!-- The "base" path for the source generators -->
+    <GeneratedFolder>Generated</GeneratedFolder>
+    <!-- Write the output for each target framework to a different sub-folder -->
+    <CompilerGeneratedFilesOutputPath>$(GeneratedFolder)\$(TargetFramework)</CompilerGeneratedFilesOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Exclude everything in the generated folder for compilation -->
+    <Compile Remove="$(GeneratedFolder)/**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Show excluded in solution explorer -->
+    <None Include="$(GeneratedFolder)/**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Lakerfield.RosaCode.Controls\Lakerfield.RosaCode.Controls.csproj" />
+    <ProjectReference Include="..\Lakerfield.RosaCode\Lakerfield.RosaCode.csproj" />
+    <ProjectReference Include="..\RpcDemo\RpcDemo.csproj" />
+  </ItemGroup>
+
+</Project>

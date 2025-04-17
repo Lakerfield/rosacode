@@ -12,6 +12,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		.editorconfig = .editorconfig
 		.gitignore = .gitignore
 		.github\workflows\build-and-publish.yml = .github\workflows\build-and-publish.yml
+		Directory.Build.targets = Directory.Build.targets
 		LICENSE = LICENSE
 		README.md = README.md
 	EndProjectSection
@@ -19,6 +20,16 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lakerfield.RosaCode.Controls", "src\Lakerfield.RosaCode.Controls\Lakerfield.RosaCode.Controls.csproj", "{8AAE9942-C384-4F9A-BC4B-5B458B4EBBDE}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lakerfield.RosaCode.Roslyn", "src\Lakerfield.RosaCode.Roslyn\Lakerfield.RosaCode.Roslyn.csproj", "{5BA0ED8F-6002-42ED-A50A-9E9FF8ECF583}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "RPC", "RPC", "{161C8E7B-B140-4057-ACDF-32EBF899B457}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RpcDemo.Playground", "src\RpcDemo.Playground\RpcDemo.Playground.csproj", "{3A433535-8402-4EC0-975B-76FABF5A1B47}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "RosaCode", "RosaCode", "{E5201F88-6AF1-4B7C-92D2-F73BD73CED12}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RpcDemo.ServerApp", "src\RpcDemo.ServerApp\RpcDemo.ServerApp.csproj", "{9487F96A-6089-4B85-9661-17F62D7ACB80}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RpcDemo", "src\RpcDemo\RpcDemo.csproj", "{F151F910-CB78-4B8C-945F-DE0933A05100}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -42,8 +53,29 @@ Global
 		{5BA0ED8F-6002-42ED-A50A-9E9FF8ECF583}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5BA0ED8F-6002-42ED-A50A-9E9FF8ECF583}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5BA0ED8F-6002-42ED-A50A-9E9FF8ECF583}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3A433535-8402-4EC0-975B-76FABF5A1B47}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3A433535-8402-4EC0-975B-76FABF5A1B47}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3A433535-8402-4EC0-975B-76FABF5A1B47}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3A433535-8402-4EC0-975B-76FABF5A1B47}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9487F96A-6089-4B85-9661-17F62D7ACB80}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9487F96A-6089-4B85-9661-17F62D7ACB80}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9487F96A-6089-4B85-9661-17F62D7ACB80}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9487F96A-6089-4B85-9661-17F62D7ACB80}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F151F910-CB78-4B8C-945F-DE0933A05100}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F151F910-CB78-4B8C-945F-DE0933A05100}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F151F910-CB78-4B8C-945F-DE0933A05100}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F151F910-CB78-4B8C-945F-DE0933A05100}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{0ED44680-DFD8-46BB-84F2-1DC4C3410161} = {E5201F88-6AF1-4B7C-92D2-F73BD73CED12}
+		{10604938-3C32-4951-A6E1-339B3F29FB81} = {E5201F88-6AF1-4B7C-92D2-F73BD73CED12}
+		{8AAE9942-C384-4F9A-BC4B-5B458B4EBBDE} = {E5201F88-6AF1-4B7C-92D2-F73BD73CED12}
+		{5BA0ED8F-6002-42ED-A50A-9E9FF8ECF583} = {E5201F88-6AF1-4B7C-92D2-F73BD73CED12}
+		{3A433535-8402-4EC0-975B-76FABF5A1B47} = {161C8E7B-B140-4057-ACDF-32EBF899B457}
+		{9487F96A-6089-4B85-9661-17F62D7ACB80} = {161C8E7B-B140-4057-ACDF-32EBF899B457}
+		{F151F910-CB78-4B8C-945F-DE0933A05100} = {161C8E7B-B140-4057-ACDF-32EBF899B457}
 	EndGlobalSection
 EndGlobal
