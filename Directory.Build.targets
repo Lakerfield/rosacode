@@ -6,12 +6,12 @@
     <PackageReference Update="Microsoft.CodeAnalysis.Features" Version="4.12.0" />
     <PackageReference Update="Basic.Reference.Assemblies.Net80" Version="1.4.2" />
 
-    <PackageReference Update="Lakerfield.Rpc"                 Version="1.0.0-beta.7" />
-    <PackageReference Update="Lakerfield.Rpc.Client"          Version="1.0.0-beta.7" />
-    <PackageReference Update="Lakerfield.Rpc.Server"          Version="1.0.0-beta.7" />
-    <PackageReference Update="Lakerfield.Rpc.SourceGenerator" Version="1.0.0-beta.7" />
-    <PackageReference Update="Lakerfield.Rpc.WebSocketClient" Version="1.0.0-beta.7" />
-    <PackageReference Update="Lakerfield.Rpc.WebSocketServer" Version="1.0.0-beta.7" />
+    <PackageReference Update="Lakerfield.Rpc"                 Version="1.0.0-rc.6" />
+    <PackageReference Update="Lakerfield.Rpc.Client"          Version="1.0.0-rc.6" />
+    <PackageReference Update="Lakerfield.Rpc.Server"          Version="1.0.0-rc.6" />
+    <PackageReference Update="Lakerfield.Rpc.SourceGenerator" Version="1.0.0-rc.6" />
+    <PackageReference Update="Lakerfield.Rpc.WebSocketClient" Version="1.0.0-rc.6" />
+    <PackageReference Update="Lakerfield.Rpc.WebSocketServer" Version="1.0.0-rc.6" />
 
   </ItemGroup>
 </Project>

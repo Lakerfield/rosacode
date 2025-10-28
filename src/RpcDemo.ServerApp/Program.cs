@@ -1,6 +1,7 @@
 using Lakerfield.RosaCode;
 using Lakerfield.Rpc;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace RpcDemo.ServerApp
 {
@@ -10,6 +11,7 @@ namespace RpcDemo.ServerApp
     {
       var builder = WebApplication.CreateBuilder(args);
 
+      builder.Services.AddSingleton<MyRosaCodeEngineServer>();
       builder.Services.AddRpcWebSocketServer<IRpcRosaCodeEngine, MyRosaCodeEngineServer>();
 
       var app = builder.Build();

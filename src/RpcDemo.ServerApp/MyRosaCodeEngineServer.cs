@@ -65,27 +65,7 @@ namespace RpcDemo.ServerApp
       {
         return await Engine.GetSignatures(code, line, column);
       }
-      //public async Task<Models.Company> CompanyFindById(System.Guid id)
-      //{
-      //  await Task.Delay(100);
-      //  //this.Connection.TriggerClose();
-      //  return new Models.Company()
-      //  {
-      //    Id = id.ToString(),
-      //    Name = "The company",
-      //    Remarks = "cool",
-      //  };
-      //}
 
-      //public IObservable<RpcSample.Models.Company> GetObservable(System.Guid id)
-      //{
-      //  return Observable.Interval(TimeSpan.FromSeconds(1)).Select(i => new Models.Company()
-      //  {
-      //    Id = "TEST",
-      //    Name = $"Company number {i}",
-      //    Remarks = "x"
-      //  }).Take(10);
-      //}
     }
   }
 }

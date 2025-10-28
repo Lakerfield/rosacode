@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.ComponentModel;
 using System.Net;
 using System.Threading.Tasks;
@@ -6,7 +6,7 @@ using RpcDemo;
 
 namespace RpcDemo.ServerApp
 {
-  public partial class MyRosaCodeEngineServer // RpcDemo.IRpcRosaCodeEngine
+  public partial class MyRosaCodeEngineServer // global::RpcDemo.IRpcRosaCodeEngine
   {
     public MyRosaCodeEngineServer() : base ()
     {
@@ -41,13 +41,13 @@ namespace RpcDemo.ServerApp
         System.Console.WriteLine($"new message {message.GetType().Name}");
 #endif
         return message switch {
-          GetCodeRequest request => _GetCode(request),
-          GetActionsRequest request => _GetActions(request),
-          GetCompletionsRequest request => _GetCompletions(request),
-          GetFormattedDocumentRequest request => _GetFormattedDocument(request),
-          GetTooltipRequest request => _GetTooltip(request),
-          GetDiagnosticsRequest request => _GetDiagnostics(request),
-          GetSignaturesRequest request => _GetSignatures(request),
+          RpcMessageGetCodeRequest request => _GetCode(request),
+          RpcMessageGetActionsRequest request => _GetActions(request),
+          RpcMessageGetCompletionsRequest request => _GetCompletions(request),
+          RpcMessageGetFormattedDocumentRequest request => _GetFormattedDocument(request),
+          RpcMessageGetTooltipRequest request => _GetTooltip(request),
+          RpcMessageGetDiagnosticsRequest request => _GetDiagnostics(request),
+          RpcMessageGetSignaturesRequest request => _GetSignatures(request),
 
           _ => TaskNotImplementedMessage(message)
         };
@@ -79,9 +79,9 @@ namespace RpcDemo.ServerApp
 
       // GetCode already implemented
       [EditorBrowsable(EditorBrowsableState.Never)]
-      public async Task<Lakerfield.Rpc.RpcMessage> _GetCode(GetCodeRequest request)
+      public async Task<Lakerfield.Rpc.RpcMessage> _GetCode(RpcMessageGetCodeRequest request)
       {
-        return new GetCodeResponse()
+        return new RpcMessageGetCodeResponse()
         {
           Result = await GetCode().ConfigureAwait(false)
         };
@@ -89,61 +89,61 @@ namespace RpcDemo.ServerApp
 
       // GetActions already implemented
       [EditorBrowsable(EditorBrowsableState.Never)]
-      public async Task<Lakerfield.Rpc.RpcMessage> _GetActions(GetActionsRequest request)
+      public async Task<Lakerfield.Rpc.RpcMessage> _GetActions(RpcMessageGetActionsRequest request)
       {
-        return new GetActionsResponse()
+        return new RpcMessageGetActionsResponse()
         {
-          Result = await GetActions(request.Code, request.Line, request.Column, request.Diagnostics).ConfigureAwait(false)
+          Result = await GetActions(request._Code, request._Line, request._Column, request._Diagnostics).ConfigureAwait(false)
         };
       }
 
       // GetCompletions already implemented
       [EditorBrowsable(EditorBrowsableState.Never)]
-      public async Task<Lakerfield.Rpc.RpcMessage> _GetCompletions(GetCompletionsRequest request)
+      public async Task<Lakerfield.Rpc.RpcMessage> _GetCompletions(RpcMessageGetCompletionsRequest request)
       {
-        return new GetCompletionsResponse()
+        return new RpcMessageGetCompletionsResponse()
         {
-          Result = await GetCompletions(request.Code, request.Line, request.Column).ConfigureAwait(false)
+          Result = await GetCompletions(request._Code, request._Line, request._Column).ConfigureAwait(false)
         };
       }
 
       // GetFormattedDocument already implemented
       [EditorBrowsable(EditorBrowsableState.Never)]
-      public async Task<Lakerfield.Rpc.RpcMessage> _GetFormattedDocument(GetFormattedDocumentRequest request)
+      public async Task<Lakerfield.Rpc.RpcMessage> _GetFormattedDocument(RpcMessageGetFormattedDocumentRequest request)
       {
-        return new GetFormattedDocumentResponse()
+        return new RpcMessageGetFormattedDocumentResponse()
         {
-          Result = await GetFormattedDocument(request.Code, request.TabSize, request.InsertSpaces).ConfigureAwait(false)
+          Result = await GetFormattedDocument(request._Code, request._TabSize, request._InsertSpaces).ConfigureAwait(false)
         };
       }
 
       // GetTooltip already implemented
       [EditorBrowsable(EditorBrowsableState.Never)]
-      public async Task<Lakerfield.Rpc.RpcMessage> _GetTooltip(GetTooltipRequest request)
+      public async Task<Lakerfield.Rpc.RpcMessage> _GetTooltip(RpcMessageGetTooltipRequest request)
       {
-        return new GetTooltipResponse()
+        return new RpcMessageGetTooltipResponse()
         {
-          Result = await GetTooltip(request.Code, request.Line, request.Column).ConfigureAwait(false)
+          Result = await GetTooltip(request._Code, request._Line, request._Column).ConfigureAwait(false)
         };
       }
 
       // GetDiagnostics already implemented
       [EditorBrowsable(EditorBrowsableState.Never)]
-      public async Task<Lakerfield.Rpc.RpcMessage> _GetDiagnostics(GetDiagnosticsRequest request)
+      public async Task<Lakerfield.Rpc.RpcMessage> _GetDiagnostics(RpcMessageGetDiagnosticsRequest request)
       {
-        return new GetDiagnosticsResponse()
+        return new RpcMessageGetDiagnosticsResponse()
         {
-          Result = await GetDiagnostics(request.Code).ConfigureAwait(false)
+          Result = await GetDiagnostics(request._Code).ConfigureAwait(false)
         };
       }
 
       // GetSignatures already implemented
       [EditorBrowsable(EditorBrowsableState.Never)]
-      public async Task<Lakerfield.Rpc.RpcMessage> _GetSignatures(GetSignaturesRequest request)
+      public async Task<Lakerfield.Rpc.RpcMessage> _GetSignatures(RpcMessageGetSignaturesRequest request)
       {
-        return new GetSignaturesResponse()
+        return new RpcMessageGetSignaturesResponse()
         {
-          Result = await GetSignatures(request.Code, request.Line, request.Column).ConfigureAwait(false)
+          Result = await GetSignatures(request._Code, request._Line, request._Column).ConfigureAwait(false)
         };
       }
 
