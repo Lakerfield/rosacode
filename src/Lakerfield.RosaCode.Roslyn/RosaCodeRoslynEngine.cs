@@ -195,6 +195,7 @@ namespace Lakerfield.RosaCode
       .WithCompilationOptions(new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary))
       //.AddMetadataReferences(refs)
       .AddMetadataReferences(XmlHelper.GetRefs(refs))
+      .AddMetadataReferences(RosaCodeRoslynConstants.GetFilteredAppDomainAssemblyReferences().Select(assembly => MetadataReference.CreateFromFile(assembly.Location)))
       //.AddMetadataReferences(metadataReferences)
       ;
 
