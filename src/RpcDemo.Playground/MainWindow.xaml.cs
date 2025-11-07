@@ -50,5 +50,10 @@ namespace RpcDemo.Playground
         editor.Mode = RosaCodeMode.Normal;
     }
 
+    protected override void OnClosed(EventArgs e)
+    {
+      _ = editor.CleanupEditor();
+      base.OnClosed(e);
+    }
   }
 }

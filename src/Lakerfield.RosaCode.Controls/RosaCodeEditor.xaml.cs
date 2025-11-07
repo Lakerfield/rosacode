@@ -57,7 +57,7 @@ namespace Lakerfield.RosaCode
         throw new Exception("RosaCodeEditor.InitializeEditor can only be called one");
 
       Engine = codeEditor;
-
+      
       await webView.EnsureCoreWebView2Async();
 
       string editorHtml = ReadEditorHtml();
@@ -151,6 +151,16 @@ namespace Lakerfield.RosaCode
         _pendingText = code;
     }
 
+    public async Task CleanupEditor()
+    {
+      if (webView?.CoreWebView2 != null)
+      {
+        webView.CoreWebView2.Stop();
+        webView.CoreWebView2.Navigate("about:blank");
+      }
+
+      webView?.Dispose();
+    }
 
 
     private async Task<IReadOnlyList<ActionAction>> GetActionsAsync(string code, int line, int column, IReadOnlyList<ActionDiagnostic> diagnostics)

@@ -67,5 +67,11 @@ namespace Lakerfield.RosaCode.Playground
         }
         """);
     }
+
+    protected override void OnClosed(EventArgs e)
+    {
+      _ = editor.CleanupEditor();
+      base.OnClosed(e);
+    }
   }
 }
