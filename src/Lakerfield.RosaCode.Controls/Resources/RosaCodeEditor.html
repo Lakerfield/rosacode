@@ -86,6 +86,10 @@
         editor.dispose();
 
       let container = document.getElementById("editor");
+      // recreate node, to avoid duplicate event handlers when changing modes (navigation keys)
+      const cleanContainer = container.cloneNode(false);
+      container.parentNode.replaceChild(cleanContainer, container);
+      container = cleanContainer;
       if (mode != 1) {
         // create normal editor
         editor = monaco.editor.create(container, {
