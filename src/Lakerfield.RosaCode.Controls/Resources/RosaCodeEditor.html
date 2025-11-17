@@ -392,7 +392,7 @@
                 message: diag.message,
                 severity: diag.severity === "Hint" ? monaco.MarkerSeverity.Hint :
                           diag.severity === "Info" ? monaco.MarkerSeverity.Info :
-                          diag.severity === "Warning" ? monaco.MarkerSeverity.Warning :
+                          diag.severity === "Warning" || diag.severity === "Hidden" ? monaco.MarkerSeverity.Warning :
                           monaco.MarkerSeverity.Error,
                 startLineNumber: diag.startLineNumber,
                 startColumn: diag.startColumn,

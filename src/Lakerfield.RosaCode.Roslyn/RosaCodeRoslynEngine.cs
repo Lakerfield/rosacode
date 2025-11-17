@@ -5,6 +5,7 @@ using Microsoft.CodeAnalysis.Completion;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Formatting;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Editing;
 using Microsoft.CodeAnalysis.Formatting;
 using Microsoft.CodeAnalysis.Options;
 using Microsoft.CodeAnalysis.Text;
@@ -319,6 +320,12 @@ namespace Lakerfield.RosaCode
 
           foreach (var ns in candidateNamespaces)
           {
+            var root = (CompilationUnitSyntax)await document.GetSyntaxRootAsync();
+            bool alreadyHasUsing = UsingHelper.HasUsing(root, ns);
+
+            if (alreadyHasUsing)
+              continue;
+
             bool shouldAddAction = false;
 
             var typeSymbol = compilation.GetTypeByMetadataName($"{ns}.{symbolName}");
@@ -373,34 +380,75 @@ namespace Lakerfield.RosaCode
           }
         }
 
-        // Interface implementation logic
+        // Interface implementation logic for both regular and generic interfaces
         var classDeclaration = token.Parent.Ancestors().OfType<ClassDeclarationSyntax>().FirstOrDefault();
         if (classDeclaration != null)
         {
           var classSymbol = semanticModel.GetDeclaredSymbol(classDeclaration) as INamedTypeSymbol;
           var baseList = classDeclaration.BaseList?.Types;
-
           if (baseList != null)
           {
             foreach (var baseType in baseList)
             {
-              var baseTypeSyntax = baseType.Type.ToString();
-              INamedTypeSymbol interfaceSymbol = null;
-              string requiredNamespace = null;
+              // Handle both regular and generic interfaces properly
+              var baseTypeSyntax = baseType.Type;
 
-              if (classSymbol == null || classSymbol.Interfaces.All(i => i.Name != baseTypeSyntax))
+              TypeSyntax effectiveType = baseTypeSyntax;
+              if (effectiveType is NullableTypeSyntax nullable)
+                effectiveType = nullable.ElementType;
+              // -------------------------------------------
+
+              string interfaceName = "";
+              var typeArguments = new List<string>();
+
+              if (effectiveType is GenericNameSyntax genericName)
+              {
+                interfaceName = genericName.Identifier.Text;
+                typeArguments = genericName.TypeArgumentList.Arguments
+                                         .Select(a => a.ToString()).ToList();
+              }
+              else if (effectiveType is IdentifierNameSyntax id)
+              {
+                interfaceName = id.Identifier.Text;
+              }
+              else if (effectiveType is QualifiedNameSyntax qualified)
+              {
+                var right = qualified.Right;
+                if (right is GenericNameSyntax g)               // ← pattern match
+                {
+                  interfaceName = g.Identifier.Text;          // "IEnumerable"
+                  typeArguments = g.TypeArgumentList
+                                   .Arguments
+                                   .Select(a => a.ToString())
+                                   .ToList();                // ["string"]
+                }
+                else interfaceName = right.ToString();
+              }
+              else
+              {
+                interfaceName = effectiveType.ToString();
+              }
+              INamedTypeSymbol interfaceSymbol = null;
+              if (classSymbol == null || classSymbol.Interfaces.All(i => i.Name != interfaceName))
               {
                 foreach (var reference in compilation.References)
                 {
                   var assembly = compilation.GetAssemblyOrModuleSymbol(reference) as IAssemblySymbol;
                   if (assembly != null)
                   {
-                    interfaceSymbol = assembly.GlobalNamespace.GetNamespaceMembers()
-                        .SelectMany(ns => GetAllTypes(ns))
-                        .FirstOrDefault(t => t.Name == baseTypeSyntax && t.TypeKind == TypeKind.Interface) as INamedTypeSymbol;
+                    // Look for interfaces with matching name and type argument count
+                    var allTypes = assembly.GlobalNamespace.GetNamespaceMembers()
+                        .SelectMany(ns => GetAllTypes(ns));
+                    interfaceSymbol = allTypes
+                        .FirstOrDefault(t =>
+                            t.Name == interfaceName &&
+                            t.TypeKind == TypeKind.Interface &&
+                            (typeArguments.Count == 0 ||
+                             t is INamedTypeSymbol namedType &&
+                             namedType.TypeArguments.Length == typeArguments.Count))
+                        as INamedTypeSymbol;
                     if (interfaceSymbol != null)
                     {
-                      requiredNamespace = interfaceSymbol.ContainingNamespace.ToDisplayString();
                       break;
                     }
                   }
@@ -408,63 +456,210 @@ namespace Lakerfield.RosaCode
               }
               else
               {
-                interfaceSymbol = classSymbol.Interfaces.FirstOrDefault(i => i.Name == baseTypeSyntax);
+                // Find existing interface implementation in class
+                interfaceSymbol = classSymbol.Interfaces.FirstOrDefault(i => i.Name == interfaceName);
               }
-
               if (interfaceSymbol != null)
               {
+                HashSet<string> requiredNamespaces = new HashSet<string>();
+                var ifaceNs = interfaceSymbol.ContainingNamespace?.ToDisplayString();
+                if (!string.IsNullOrEmpty(ifaceNs))
+                  requiredNamespaces.Add(ifaceNs);
+                var interfacesToInspect = interfaceSymbol.AllInterfaces.Concat(new[] { interfaceSymbol });
+                foreach (var iface in interfacesToInspect)
+                {
+                  var baseIfaceNs = iface.ContainingNamespace?.ToDisplayString();
+                  if (!string.IsNullOrEmpty(baseIfaceNs))
+                    requiredNamespaces.Add(baseIfaceNs);
+                  foreach (var member in iface.GetMembers())
+                  {
+                    switch (member)
+                    {
+                      case IMethodSymbol m:
+                        // Return type
+                        UsingHelper.AddNamespacesFromType(m.ReturnType, requiredNamespaces);
+                        // Parameter types
+                        foreach (var p in m.Parameters)
+                          UsingHelper.AddNamespacesFromType(p.Type, requiredNamespaces);
+                        break;
+                      case IPropertySymbol p:
+                        UsingHelper.AddNamespacesFromType(p.Type, requiredNamespaces);
+                        break;
+                      case IEventSymbol e:
+                        UsingHelper.AddNamespacesFromType(e.Type, requiredNamespaces);
+                        break;
+                    }
+                  }
+                }
+                var enumeratorReturnType = UsingHelper.GetNonGenericEnumeratorReturnType(interfaceSymbol, compilation);
+                if (enumeratorReturnType != null)
+                {
+                  UsingHelper.AddNamespacesFromType(enumeratorReturnType, requiredNamespaces);
+                }
                 var allInterfaceMembers = interfaceSymbol.GetMembers();
                 var unimplementedMembers = allInterfaceMembers
                     .Where(m => classSymbol == null || classSymbol.FindImplementationForInterfaceMember(m) == null)
                     .ToList();
-
                 if (unimplementedMembers.Any() || roslynDiagnostics.Any(d => d.Id == "CS0535"))
                 {
                   var relevantDiagnostics = roslynDiagnostics
                       .Where(d => d.Id == "CS0535" || d.Location.SourceSpan.Contains(position))
                       .Select(Convert)
                       .ToList();
-
                   var codeAction = CodeAction.Create(
-                      $"Implement interface '{interfaceSymbol.Name}'",
+                      $"Implement interface '{interfaceSymbol.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)}'",
                       async cancellationToken =>
                       {
                         var root = (CompilationUnitSyntax)await document.GetSyntaxRootAsync(cancellationToken);
-                        var newClass = classDeclaration;
-
-                        if (!string.IsNullOrEmpty(requiredNamespace) && !root.Usings.Any(u => u.Name.ToString() == requiredNamespace))
+                        var editor = new SyntaxEditor(root, document.Project.Solution.Workspace);
+                        // Collect new usings to add
+                        var newUsings = new List<UsingDirectiveSyntax>();
+                        foreach (var ns in requiredNamespaces)
                         {
-                          var newUsing = SyntaxFactory.UsingDirective(SyntaxFactory.ParseName(requiredNamespace))
-                                        .WithTrailingTrivia(SyntaxFactory.CarriageReturnLineFeed);
-                          root = root.WithUsings(SyntaxFactory.List(root.Usings.Add(newUsing).OrderBy(u => u.Name.ToString())));
+                          // Skip if the file already has this using.
+                          if (root.Usings.Any(u => u.Name.ToString() == ns))
+                            continue;
+                          // Build the new using-directive.
+                          var newUsing = SyntaxFactory.UsingDirective(SyntaxFactory.ParseName(ns))
+                                                      .WithTrailingTrivia(SyntaxFactory.ElasticCarriageReturnLineFeed);
+                          newUsings.Add(newUsing);
                         }
-
+                        // Insert all new usings at once
+                        if (newUsings.Count > 0)
+                        {
+                          var lastUsing = root.Usings.LastOrDefault();
+                          if (lastUsing != null)
+                          {
+                            editor.InsertAfter(lastUsing, newUsings);
+                          }
+                          else
+                          {
+                            var firstMember = root.Members.FirstOrDefault();
+                            if (firstMember != null)
+                            {
+                              editor.InsertBefore(firstMember, newUsings);
+                            }
+                            else
+                            {
+                              // Empty file - replace root with usings added
+                              editor.ReplaceNode(root, root.WithUsings(SyntaxFactory.List(newUsings)));
+                            }
+                          }
+                        }
+                        // Fix base type if qualified with wrong namespace
+                        string correctNs = interfaceSymbol.ContainingNamespace?.ToDisplayString() ?? "";
+                        if (baseTypeSyntax is QualifiedNameSyntax qualifiedSyntax)
+                        {
+                          string writtenNs = qualifiedSyntax.Left.ToString();
+                          if (writtenNs != correctNs)
+                          {
+                            var correctTypeSyntax = SyntaxFactory.QualifiedName(
+                                SyntaxFactory.ParseName(correctNs),
+                                qualifiedSyntax.Right);
+                            editor.ReplaceNode(baseTypeSyntax, correctTypeSyntax);
+                          }
+                        }
+                        var classNode = editor.OriginalRoot
+                              .DescendantNodes()
+                              .OfType<ClassDeclarationSyntax>()
+                              .First(cd => cd.Identifier.ValueText == classDeclaration.Identifier.ValueText);
+                        // Special handling for interfaces with type parameters to generate proper GetEnumerator method
+                        if (typeArguments.Count > 0)
+                        {
+                          // Check if this interface has a GetEnumerator method with no parameters
+                          var getEnumeratorMethod = allInterfaceMembers
+                                .OfType<IMethodSymbol>()
+                                .FirstOrDefault(m => m.Name == "GetEnumerator" && m.Parameters.Length == 0);
+                          if (getEnumeratorMethod != null)
+                          {
+                            var genericTypeArgument = typeArguments[0]; // For interfaces like IEnumerable<string>, this is "string"
+                                                                        // Generate IEnumerator<T> GetEnumerator()
+                            var enumeratorMethod = SyntaxFactory.MethodDeclaration(
+                                  SyntaxFactory.ParseTypeName($"IEnumerator<{genericTypeArgument}>"),
+                                  "GetEnumerator")
+                                  .WithModifiers(SyntaxFactory.TokenList(SyntaxFactory.Token(SyntaxKind.PublicKeyword)))
+                                  .WithBody(SyntaxFactory.Block(
+                                      SyntaxFactory.ThrowStatement(
+                                          SyntaxFactory.ObjectCreationExpression(
+                                              SyntaxFactory.ParseName("NotImplementedException"))
+                                          .WithArgumentList(SyntaxFactory.ArgumentList()))));
+                            editor.AddMember(classNode, enumeratorMethod);
+                            // Generate IEnumerator IEnumerable.GetEnumerator() - explicit interface implementation (no 'public' keyword)
+                            var enumerableGetEnumeratorMethod = SyntaxFactory.MethodDeclaration(
+                                  SyntaxFactory.ParseTypeName("IEnumerator"),
+                                  "IEnumerable.GetEnumerator")
+                                  .WithModifiers(SyntaxFactory.TokenList()) // No modifiers for explicit interface implementation
+                                  .WithBody(SyntaxFactory.Block(
+                                      SyntaxFactory.ReturnStatement(
+                                          SyntaxFactory.InvocationExpression(
+                                              SyntaxFactory.IdentifierName("GetEnumerator")))));
+                            editor.AddMember(classNode, enumerableGetEnumeratorMethod);
+                          }
+                        }
+                        // General case for other interface members
                         foreach (var member in allInterfaceMembers)
                         {
                           if (member is IMethodSymbol method)
                           {
+                            // Handle generic method signatures properly
+                            var returnType = method.ReturnType.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
+                            // Skip the GetEnumerator we already handled above
+                            if (method.Name == "GetEnumerator" && method.Parameters.Length == 0 && typeArguments.Count > 0)
+                            {
+                              // This is already handled above for generic interfaces
+                              continue;
+                            }
                             var methodDecl = SyntaxFactory.MethodDeclaration(
-                                          SyntaxFactory.ParseTypeName(method.ReturnType.ToDisplayString()),
-                                          method.Name)
-                                          .WithParameterList(SyntaxFactory.ParameterList(
-                                              SyntaxFactory.SeparatedList(method.Parameters.Select(p =>
-                                                  SyntaxFactory.Parameter(SyntaxFactory.Identifier(p.Name))
-                                                      .WithType(SyntaxFactory.ParseTypeName(p.Type.ToDisplayString()))))))
-                                          .WithBody(SyntaxFactory.Block(
-                                              SyntaxFactory.ThrowStatement(
-                                                  SyntaxFactory.ObjectCreationExpression(
-                                                      SyntaxFactory.ParseTypeName("System.NotImplementedException"))
-                                                  .WithArgumentList(SyntaxFactory.ArgumentList()))))
-                                          .WithModifiers(SyntaxFactory.TokenList(SyntaxFactory.Token(SyntaxKind.PublicKeyword)));
-                            newClass = newClass.AddMembers(methodDecl);
+                                  SyntaxFactory.ParseTypeName(returnType),
+                                  method.Name)
+                                  .WithParameterList(SyntaxFactory.ParameterList(
+                                      SyntaxFactory.SeparatedList(method.Parameters.Select(p =>
+                                          SyntaxFactory.Parameter(SyntaxFactory.Identifier(p.Name))
+                                          .WithType(
+                                              SyntaxFactory.ParseTypeName(
+                                                  p.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)))))))
+                                  .WithBody(SyntaxFactory.Block(
+                                      SyntaxFactory.ThrowStatement(
+                                          SyntaxFactory.ObjectCreationExpression(
+                                              SyntaxFactory.ParseName("NotImplementedException"))
+                                          .WithArgumentList(SyntaxFactory.ArgumentList()))))
+                                  .WithModifiers(SyntaxFactory.TokenList(SyntaxFactory.Token(SyntaxKind.PublicKeyword)));
+                            editor.AddMember(classNode, methodDecl);
+                          }
+                          else if (member is IPropertySymbol property)
+                          {
+                            // Handle properties
+                            var propertyType = property.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
+                            var propertyDecl = SyntaxFactory.PropertyDeclaration(
+                                  SyntaxFactory.ParseTypeName(propertyType),
+                                  property.Name)
+                                  .WithModifiers(SyntaxFactory.TokenList(SyntaxFactory.Token(SyntaxKind.PublicKeyword)))
+                                  .WithAccessorList(SyntaxFactory.AccessorList(
+                                      SyntaxFactory.List(new[]
+                                      {
+                                        SyntaxFactory.AccessorDeclaration(SyntaxKind.GetAccessorDeclaration)
+                                            .WithSemicolonToken(SyntaxFactory.Token(SyntaxKind.SemicolonToken)),
+                                        SyntaxFactory.AccessorDeclaration(SyntaxKind.SetAccessorDeclaration)
+                                            .WithSemicolonToken(SyntaxFactory.Token(SyntaxKind.SemicolonToken))
+                                          })));
+                            editor.AddMember(classNode, propertyDecl);
+                          }
+                          else if (member is IEventSymbol eventSymbol)
+                          {
+                            // Handle events
+                            var eventType = eventSymbol.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
+                            var eventDecl = SyntaxFactory.EventDeclaration(
+                                  SyntaxFactory.ParseTypeName(eventType),
+                                  eventSymbol.Name)
+                                  .WithModifiers(SyntaxFactory.TokenList(SyntaxFactory.Token(SyntaxKind.PublicKeyword)));
+                            editor.AddMember(classNode, eventDecl);
                           }
                         }
-
-                        return document.WithSyntaxRoot(root.ReplaceNode(classDeclaration, newClass)).Project.Solution;
+                        var newRoot = editor.GetChangedRoot();
+                        return document.WithSyntaxRoot(newRoot).Project.Solution;
                       },
                       $"ImplementInterface{interfaceSymbol.Name}"
                   );
-
                   actions.Add(await MapCodeActionToDto(codeAction, relevantDiagnostics, document));
                 }
               }
