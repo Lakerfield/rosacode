@@ -37,7 +37,19 @@ namespace Lakerfield.RosaCode.Playground
 
       var engine = new RosaCodeRoslynEngine();
       
-      _ = editor.InitializeEditor(engine);
+      InitializeEditorAsync(engine, true);
+    }
+
+    private async void InitializeEditorAsync(IRosaCodeEngine engine, bool openDevTools = false)
+    {
+      try
+      {
+        await editor.InitializeEditor(engine, openDevTools);
+      }
+      catch (Exception ex)
+      {
+        MessageBox.Show(this, ex.Message, "Editor initialization failed");
+      }
     }
 
     private void ToggleClick(object sender, RoutedEventArgs e)
