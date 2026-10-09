@@ -44,20 +44,10 @@ namespace RpcDemo.ServerApp
           RpcMessageGetCodeRequest request => _GetCode(request),
           RpcMessageGetActionsRequest request => _GetActions(request),
           RpcMessageGetCompletionsRequest request => _GetCompletions(request),
-          RpcMessageGetCompletionDescriptionRequest request => _GetCompletionDescription(request),
           RpcMessageGetFormattedDocumentRequest request => _GetFormattedDocument(request),
-          RpcMessageGetFormattedRangeRequest request => _GetFormattedRange(request),
           RpcMessageGetTooltipRequest request => _GetTooltip(request),
           RpcMessageGetDiagnosticsRequest request => _GetDiagnostics(request),
           RpcMessageGetSignaturesRequest request => _GetSignatures(request),
-          RpcMessageGetDefinitionRequest request => _GetDefinition(request),
-          RpcMessageGetReferencesRequest request => _GetReferences(request),
-          RpcMessageGetRenameInfoRequest request => _GetRenameInfo(request),
-          RpcMessageGetRenameEditsRequest request => _GetRenameEdits(request),
-          RpcMessageGetDocumentSymbolsRequest request => _GetDocumentSymbols(request),
-          RpcMessageGetSemanticTokensRequest request => _GetSemanticTokens(request),
-          RpcMessageGetInlayHintsRequest request => _GetInlayHints(request),
-          RpcMessageGetFoldingRangesRequest request => _GetFoldingRanges(request),
 
           _ => TaskNotImplementedMessage(message)
         };
@@ -103,7 +93,7 @@ namespace RpcDemo.ServerApp
       {
         return new RpcMessageGetActionsResponse()
         {
-          Result = await GetActions(request._Code, request._Line, request._Column, request._EndLine, request._EndColumn).ConfigureAwait(false)
+          Result = await GetActions(request._Code, request._Line, request._Column, request._Diagnostics).ConfigureAwait(false)
         };
       }
 
@@ -117,16 +107,6 @@ namespace RpcDemo.ServerApp
         };
       }
 
-      // GetCompletionDescription already implemented
-      [EditorBrowsable(EditorBrowsableState.Never)]
-      public async Task<Lakerfield.Rpc.RpcMessage> _GetCompletionDescription(RpcMessageGetCompletionDescriptionRequest request)
-      {
-        return new RpcMessageGetCompletionDescriptionResponse()
-        {
-          Result = await GetCompletionDescription(request._Code, request._Line, request._Column, request._CompletionId).ConfigureAwait(false)
-        };
-      }
-
       // GetFormattedDocument already implemented
       [EditorBrowsable(EditorBrowsableState.Never)]
       public async Task<Lakerfield.Rpc.RpcMessage> _GetFormattedDocument(RpcMessageGetFormattedDocumentRequest request)
@@ -134,16 +114,6 @@ namespace RpcDemo.ServerApp
         return new RpcMessageGetFormattedDocumentResponse()
         {
           Result = await GetFormattedDocument(request._Code, request._TabSize, request._InsertSpaces).ConfigureAwait(false)
-        };
-      }
-
-      // GetFormattedRange already implemented
-      [EditorBrowsable(EditorBrowsableState.Never)]
-      public async Task<Lakerfield.Rpc.RpcMessage> _GetFormattedRange(RpcMessageGetFormattedRangeRequest request)
-      {
-        return new RpcMessageGetFormattedRangeResponse()
-        {
-          Result = await GetFormattedRange(request._Code, request._StartLine, request._StartColumn, request._EndLine, request._EndColumn, request._TabSize, request._InsertSpaces).ConfigureAwait(false)
         };
       }
 
@@ -174,86 +144,6 @@ namespace RpcDemo.ServerApp
         return new RpcMessageGetSignaturesResponse()
         {
           Result = await GetSignatures(request._Code, request._Line, request._Column).ConfigureAwait(false)
-        };
-      }
-
-      // GetDefinition already implemented
-      [EditorBrowsable(EditorBrowsableState.Never)]
-      public async Task<Lakerfield.Rpc.RpcMessage> _GetDefinition(RpcMessageGetDefinitionRequest request)
-      {
-        return new RpcMessageGetDefinitionResponse()
-        {
-          Result = await GetDefinition(request._Code, request._Line, request._Column).ConfigureAwait(false)
-        };
-      }
-
-      // GetReferences already implemented
-      [EditorBrowsable(EditorBrowsableState.Never)]
-      public async Task<Lakerfield.Rpc.RpcMessage> _GetReferences(RpcMessageGetReferencesRequest request)
-      {
-        return new RpcMessageGetReferencesResponse()
-        {
-          Result = await GetReferences(request._Code, request._Line, request._Column).ConfigureAwait(false)
-        };
-      }
-
-      // GetRenameInfo already implemented
-      [EditorBrowsable(EditorBrowsableState.Never)]
-      public async Task<Lakerfield.Rpc.RpcMessage> _GetRenameInfo(RpcMessageGetRenameInfoRequest request)
-      {
-        return new RpcMessageGetRenameInfoResponse()
-        {
-          Result = await GetRenameInfo(request._Code, request._Line, request._Column).ConfigureAwait(false)
-        };
-      }
-
-      // GetRenameEdits already implemented
-      [EditorBrowsable(EditorBrowsableState.Never)]
-      public async Task<Lakerfield.Rpc.RpcMessage> _GetRenameEdits(RpcMessageGetRenameEditsRequest request)
-      {
-        return new RpcMessageGetRenameEditsResponse()
-        {
-          Result = await GetRenameEdits(request._Code, request._Line, request._Column, request._NewName).ConfigureAwait(false)
-        };
-      }
-
-      // GetDocumentSymbols already implemented
-      [EditorBrowsable(EditorBrowsableState.Never)]
-      public async Task<Lakerfield.Rpc.RpcMessage> _GetDocumentSymbols(RpcMessageGetDocumentSymbolsRequest request)
-      {
-        return new RpcMessageGetDocumentSymbolsResponse()
-        {
-          Result = await GetDocumentSymbols(request._Code).ConfigureAwait(false)
-        };
-      }
-
-      // GetSemanticTokens already implemented
-      [EditorBrowsable(EditorBrowsableState.Never)]
-      public async Task<Lakerfield.Rpc.RpcMessage> _GetSemanticTokens(RpcMessageGetSemanticTokensRequest request)
-      {
-        return new RpcMessageGetSemanticTokensResponse()
-        {
-          Result = await GetSemanticTokens(request._Code).ConfigureAwait(false)
-        };
-      }
-
-      // GetInlayHints already implemented
-      [EditorBrowsable(EditorBrowsableState.Never)]
-      public async Task<Lakerfield.Rpc.RpcMessage> _GetInlayHints(RpcMessageGetInlayHintsRequest request)
-      {
-        return new RpcMessageGetInlayHintsResponse()
-        {
-          Result = await GetInlayHints(request._Code, request._StartLine, request._StartColumn, request._EndLine, request._EndColumn).ConfigureAwait(false)
-        };
-      }
-
-      // GetFoldingRanges already implemented
-      [EditorBrowsable(EditorBrowsableState.Never)]
-      public async Task<Lakerfield.Rpc.RpcMessage> _GetFoldingRanges(RpcMessageGetFoldingRangesRequest request)
-      {
-        return new RpcMessageGetFoldingRangesResponse()
-        {
-          Result = await GetFoldingRanges(request._Code).ConfigureAwait(false)
         };
       }
 

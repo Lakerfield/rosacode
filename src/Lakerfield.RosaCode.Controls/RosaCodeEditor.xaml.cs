@@ -26,8 +26,6 @@ namespace Lakerfield.RosaCode
     };
 
     private bool _isEditorLoaded = false;
-    private readonly Dictionary<string, string> _queuedMessages = new();
-    private readonly Dictionary<string, object?> _options = new();
 
     public IRosaCodeEngine Engine { get; private set; }
 
@@ -71,201 +69,78 @@ namespace Lakerfield.RosaCode
 
     private void UpdateMode(RosaCodeMode value)
     {
-      PostOrQueue("setMode", Serialize((int)value));
+      PostWebMessage(-1, "setMode", Serialize((int)value));
     }
-
-    // Requests that are still running, by message id, so the editor can cancel them
-    private readonly Dictionary<int, CancellationTokenSource> _runningRequests = new();
 
     private async void WebViewWebMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
-      WebMessage? message = null;
-      CancellationTokenSource? cts = null;
-      try
-      {
-        message = Deserialize<WebMessage>(e.WebMessageAsJson);
+      var message = Deserialize<WebMessage>(e.WebMessageAsJson);
+      if (message == null) return;
 
-        if (message.Id > 0) // 0 is a notification, nobody waits for an answer
-        {
-          cts = new CancellationTokenSource();
-          _runningRequests[message.Id] = cts;
-        }
-
-        await HandleWebMessage(message, cts?.Token ?? CancellationToken.None);
-      }
-      catch (OperationCanceledException) when (cts?.IsCancellationRequested == true)
-      {
-        // the editor cancelled this request and no longer waits for the answer
-      }
-      catch (Exception ex)
-      {
-        System.Diagnostics.Trace.TraceError($"RosaCode: '{message?.Method}' failed: {ex}");
-
-        // Always answer, so the pending call in the editor is rejected instead of waiting forever.
-        if (message != null && message.Id > 0)
-        {
-          try { PostWebMessage(message.Id, "error", Serialize(ex.Message)); }
-          catch (Exception postEx) { System.Diagnostics.Trace.TraceError($"RosaCode: could not report error: {postEx.Message}"); }
-        }
-      }
-      finally
-      {
-        if (message != null && cts != null)
-        {
-          _runningRequests.Remove(message.Id);
-          cts.Dispose();
-        }
-      }
-    }
-
-    private async Task HandleWebMessage(WebMessage message, CancellationToken cancellationToken)
-    {
       switch (message.Method)
       {
-        case "ready":
-          // Monaco is initialized in the page: send everything that was set before.
-          _isEditorLoaded = true;
-          foreach (var method in new[] { "setMode", "setTheme", "setOptions", "setDiagnosticsDelay" })
-            if (_queuedMessages.Remove(method, out var queued))
-              PostWebMessage(-1, method, queued);
-          SetCode(_pendingText ?? string.Empty);
-          if (_queuedMessages.Remove("setOriginalCode", out var queuedOriginal))
-            PostWebMessage(-1, "setOriginalCode", queuedOriginal);
-          break;
-
-        case "textChanged":
-          HandleInternalTextChanged(Deserialize<string>(Deserialize<DiagnosticsRequest>(message.Json).Code));
-          break;
-
-        case "cancel":
-          if (_runningRequests.TryGetValue(Deserialize<CancelRequest>(message.Json).Id, out var running))
-            running.Cancel();
-          break;
-
         case "action":
           var actionRequest = Deserialize<ActionRequest>(message.Json);
-          var actions = await GetActionsAsync(Deserialize<string>(actionRequest.Code), actionRequest.Line, actionRequest.Column, actionRequest.EndLine, actionRequest.EndColumn, cancellationToken);
-          Reply(message, cancellationToken, new ActionResponse() { Actions = actions });
+          try
+          {
+            var actions = await GetActionsAsync(Deserialize<string>(actionRequest.Code), actionRequest.Line, actionRequest.Column, actionRequest.Diagnostics);
+            var actionResult = new ActionResponse() { Actions = actions };
+            PostWebMessage(message.Id, message.Method, Serialize(actionResult));
+          }
+          catch (ArgumentOutOfRangeException)
+          {
+            //TODO: fix flow, do not use "old" diagnostics with new code
+          }
           break;
 
         case "completion":
           var completionRequest = Deserialize<CompletionRequest>(message.Json);
-          var completionResult = await GetCompletionsAsync(Deserialize<string>(completionRequest.Code), completionRequest.Line, completionRequest.Column, cancellationToken);
-          Reply(message, cancellationToken, completionResult);
-          break;
-
-        case "completionResolve":
-          var resolveRequest = Deserialize<CompletionResolveRequest>(message.Json);
-          var documentation = await GetCompletionDescriptionAsync(Deserialize<string>(resolveRequest.Code), resolveRequest.Line, resolveRequest.Column, resolveRequest.Id, cancellationToken);
-          Reply(message, cancellationToken, new CompletionResolveResponse() { Documentation = documentation });
+          var completionResult = await GetCompletionsAsync(Deserialize<string>(completionRequest.Code), completionRequest.Line, completionRequest.Column);
+          PostWebMessage(message.Id, message.Method, Serialize(completionResult));
           break;
 
         case "format":
           var formatRequest = Deserialize<FormatRequest>(message.Json);
-          var format = await GetFormatAsync(Deserialize<string>(formatRequest.Code), formatRequest.TabSize, formatRequest.InsertSpaces, cancellationToken);
-          Reply(message, cancellationToken, new FormatResponse() { Format = format });
-          break;
-
-        case "formatRange":
-          var formatRangeRequest = Deserialize<FormatRangeRequest>(message.Json);
-          var formatEdits = await GetFormatRangeAsync(Deserialize<string>(formatRangeRequest.Code), formatRangeRequest, cancellationToken);
-          Reply(message, cancellationToken, new FormatRangeResponse() { Edits = formatEdits });
+          var format = await GetFormatAsync(Deserialize<string>(formatRequest.Code), formatRequest.TabSize, formatRequest.InsertSpaces);
+          var formatResult = new FormatResponse() { Format = format };
+          PostWebMessage(message.Id, message.Method, Serialize(formatResult));
           break;
 
         case "hover":
           var hoverRequest = Deserialize<HoverRequest>(message.Json);
-          var hoverTooltip = await GetHoverAsync(Deserialize<string>(hoverRequest.Code), hoverRequest.Line, hoverRequest.Column, cancellationToken);
-          Reply(message, cancellationToken, new HoverResponse() { Tooltip = hoverTooltip });
+          var hoverTooltip = await GetHoverAsync(Deserialize<string>(hoverRequest.Code), hoverRequest.Line, hoverRequest.Column);
+          var hoverResult = new HoverResponse() { Tooltip = hoverTooltip };
+          PostWebMessage(message.Id, message.Method, Serialize(hoverResult));
           break;
+
+        //case "execute":
+        //  var executionResult = await ExecuteCSharpAsync(message.Data.Code);
+        //  SendMessageToWebView("executionResult", executionResult);
+        //  break;
 
         case "diagnostics":
           var diagnosticRequest = Deserialize<DiagnosticsRequest>(message.Json);
-          var diagnostics = await GetDiagnosticsAsync(Deserialize<string>(diagnosticRequest.Code), cancellationToken);
-          Reply(message, cancellationToken, diagnostics);
+          var diagnostics = await GetDiagnosticsAsync(Deserialize<string>(diagnosticRequest.Code));
+          PostWebMessage(message.Id, message.Method, Serialize(diagnostics));
           break;
 
         case "signatures":
           var signatureRequest = Deserialize<CompletionRequest>(message.Json);
-          var signatures = await GetSignaturesAsync(Deserialize<string>(signatureRequest.Code), signatureRequest.Line, signatureRequest.Column, cancellationToken);
-          Reply(message, cancellationToken, signatures);
-          break;
-
-        case "definition":
-          var definitionRequest = Deserialize<CompletionRequest>(message.Json);
-          var definitions = await CallEngine(cancellationToken,
-            (engine, ct) => engine.GetDefinition(Deserialize<string>(definitionRequest.Code), definitionRequest.Line, definitionRequest.Column, ct),
-            engine => engine.GetDefinition(Deserialize<string>(definitionRequest.Code), definitionRequest.Line, definitionRequest.Column));
-          Reply(message, cancellationToken, new LocationsResponse() { Locations = definitions });
-          break;
-
-        case "references":
-          var referencesRequest = Deserialize<CompletionRequest>(message.Json);
-          var references = await CallEngine(cancellationToken,
-            (engine, ct) => engine.GetReferences(Deserialize<string>(referencesRequest.Code), referencesRequest.Line, referencesRequest.Column, ct),
-            engine => engine.GetReferences(Deserialize<string>(referencesRequest.Code), referencesRequest.Line, referencesRequest.Column));
-          Reply(message, cancellationToken, new LocationsResponse() { Locations = references });
-          break;
-
-        case "renameInfo":
-          var renameInfoRequest = Deserialize<CompletionRequest>(message.Json);
-          var renameInfo = await CallEngine(cancellationToken,
-            (engine, ct) => engine.GetRenameInfo(Deserialize<string>(renameInfoRequest.Code), renameInfoRequest.Line, renameInfoRequest.Column, ct),
-            engine => engine.GetRenameInfo(Deserialize<string>(renameInfoRequest.Code), renameInfoRequest.Line, renameInfoRequest.Column));
-          Reply(message, cancellationToken, renameInfo);
-          break;
-
-        case "rename":
-          var renameRequest = Deserialize<RenameRequest>(message.Json);
-          var renameResult = await CallEngine(cancellationToken,
-            (engine, ct) => engine.GetRenameEdits(Deserialize<string>(renameRequest.Code), renameRequest.Line, renameRequest.Column, renameRequest.NewName, ct),
-            engine => engine.GetRenameEdits(Deserialize<string>(renameRequest.Code), renameRequest.Line, renameRequest.Column, renameRequest.NewName));
-          Reply(message, cancellationToken, renameResult);
-          break;
-
-        case "symbols":
-          var symbolsRequest = Deserialize<DiagnosticsRequest>(message.Json);
-          var symbols = await CallEngine(cancellationToken,
-            (engine, ct) => engine.GetDocumentSymbols(Deserialize<string>(symbolsRequest.Code), ct),
-            engine => engine.GetDocumentSymbols(Deserialize<string>(symbolsRequest.Code)));
-          Reply(message, cancellationToken, new SymbolsResponse() { Symbols = symbols });
-          break;
-
-        case "semanticTokens":
-          var tokensRequest = Deserialize<DiagnosticsRequest>(message.Json);
-          var tokens = await CallEngine(cancellationToken,
-            (engine, ct) => engine.GetSemanticTokens(Deserialize<string>(tokensRequest.Code), ct),
-            engine => engine.GetSemanticTokens(Deserialize<string>(tokensRequest.Code)));
-          Reply(message, cancellationToken, tokens);
-          break;
-
-        case "inlayHints":
-          var hintsRequest = Deserialize<RangeRequest>(message.Json);
-          var hints = await CallEngine(cancellationToken,
-            (engine, ct) => engine.GetInlayHints(Deserialize<string>(hintsRequest.Code), hintsRequest.StartLine, hintsRequest.StartColumn, hintsRequest.EndLine, hintsRequest.EndColumn, ct),
-            engine => engine.GetInlayHints(Deserialize<string>(hintsRequest.Code), hintsRequest.StartLine, hintsRequest.StartColumn, hintsRequest.EndLine, hintsRequest.EndColumn));
-          Reply(message, cancellationToken, new InlayHintsResponse() { Hints = hints });
-          break;
-
-        case "folding":
-          var foldingRequest = Deserialize<DiagnosticsRequest>(message.Json);
-          var folding = await CallEngine(cancellationToken,
-            (engine, ct) => engine.GetFoldingRanges(Deserialize<string>(foldingRequest.Code), ct),
-            engine => engine.GetFoldingRanges(Deserialize<string>(foldingRequest.Code)));
-          Reply(message, cancellationToken, new FoldingResponse() { Ranges = folding });
+          var signatures = await GetSignaturesAsync(Deserialize<string>(signatureRequest.Code), signatureRequest.Line, signatureRequest.Column);
+          PostWebMessage(message.Id, message.Method, Serialize(signatures));
           break;
       }
     }
 
-    private void Reply(WebMessage request, CancellationToken cancellationToken, object response)
+    private async void WebViewNavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
     {
-      cancellationToken.ThrowIfCancellationRequested();
-      PostWebMessage(request.Id, request.Method, Serialize(response));
+      _isEditorLoaded = true;
+      SetCode(_pendingText);
     }
 
-    /// <summary>The text in the editor. Not asked from the engine, which only knows the code of its last request.</summary>
     public Task<string> GetCode()
     {
-      return Task.FromResult(_pendingText ?? Text ?? string.Empty);
+      return Engine.GetCode();
     }
 
     public void SetCode(string code)
@@ -276,50 +151,8 @@ namespace Lakerfield.RosaCode
         _pendingText = code;
     }
 
-    /// <summary>Sets the original (left) side of the diff view. By default it is the last code set with <see cref="SetCode"/>.</summary>
-    public void SetOriginalCode(string code)
+    public async Task CleanupEditor()
     {
-      PostOrQueue("setOriginalCode", Serialize(code));
-    }
-
-    /// <summary>Sets the Monaco theme: "vs", "vs-dark" (default) or "hc-black".</summary>
-    public void SetTheme(string theme)
-    {
-      PostOrQueue("setTheme", Serialize(theme));
-    }
-
-    /// <summary>How long the text must stay unchanged before it is checked for errors. The default is one second.</summary>
-    public void SetDiagnosticsDelay(TimeSpan delay)
-    {
-      PostOrQueue("setDiagnosticsDelay", Serialize((int)Math.Max(0, delay.TotalMilliseconds)));
-    }
-
-    /// <summary>Sets Monaco editor options (https://microsoft.github.io/monaco-editor/docs.html), e.g. { ["readOnly"] = true, ["fontSize"] = 14 }.</summary>
-    public void SetOptions(IReadOnlyDictionary<string, object?> options)
-    {
-      foreach (var option in options)
-        _options[option.Key] = option.Value;
-
-      // before the editor is ready everything is sent at once, afterwards only the changes
-      PostOrQueue("setOptions", Serialize(_isEditorLoaded ? options : _options));
-    }
-
-    private void PostOrQueue(string method, string json)
-    {
-      if (_isEditorLoaded)
-        PostWebMessage(-1, method, json);
-      else
-        _queuedMessages[method] = json;
-    }
-
-    public Task CleanupEditor()
-    {
-      foreach (var running in _runningRequests.Values.ToList())
-        running.Cancel();
-
-      _queuedMessages.Clear();
-      _isEditorLoaded = false;
-
       if (webView?.CoreWebView2 != null)
       {
         webView.CoreWebView2.Stop();
@@ -327,97 +160,42 @@ namespace Lakerfield.RosaCode
       }
 
       webView?.Dispose();
-
-      return Task.CompletedTask;
     }
 
 
-    // Calls the engine with the token when it supports cancellation, and drops the answer when the editor cancelled in the meantime
-    private async Task<T> CallEngine<T>(
-      CancellationToken cancellationToken,
-      Func<ICancellableRosaCodeEngine, CancellationToken, Task<T>> cancellable,
-      Func<IRosaCodeEngine, Task<T>> plain)
+    private async Task<IReadOnlyList<ActionAction>> GetActionsAsync(string code, int line, int column, IReadOnlyList<ActionDiagnostic> diagnostics)
     {
-      var result = Engine is ICancellableRosaCodeEngine engine
-        ? await cancellable(engine, cancellationToken)
-        : await plain(Engine);
+      var actions = await Engine.GetActions(code, line, column, diagnostics);
 
-      cancellationToken.ThrowIfCancellationRequested();
-      return result;
-    }
-
-    // The engine gets the token when it supports cancellation (the Roslyn engine does, a remote engine cannot).
-    // Either way the answer is dropped when the editor cancelled in the meantime.
-
-    private async Task<IReadOnlyList<ActionAction>> GetActionsAsync(string code, int line, int column, int endLine, int endColumn, CancellationToken cancellationToken)
-    {
-      var actions = Engine is ICancellableRosaCodeEngine cancellable
-        ? await cancellable.GetActions(code, line, column, endLine, endColumn, cancellationToken)
-        : await Engine.GetActions(code, line, column, endLine, endColumn);
-
-      cancellationToken.ThrowIfCancellationRequested();
       return actions;
     }
 
-    private async Task<Completion[]> GetCompletionsAsync(string code, int line, int column, CancellationToken cancellationToken)
+    private async Task<Completion[]> GetCompletionsAsync(string code, int line, int column)
     {
-      var completions = Engine is ICancellableRosaCodeEngine cancellable
-        ? await cancellable.GetCompletions(code, line, column, cancellationToken)
-        : await Engine.GetCompletions(code, line, column);
+      var completions = await Engine.GetCompletions(code, line, column);
 
-      cancellationToken.ThrowIfCancellationRequested();
       return completions.ToArray();
     }
 
-    private async Task<string> GetCompletionDescriptionAsync(string code, int line, int column, int completionId, CancellationToken cancellationToken)
+    private async Task<string> GetFormatAsync(string code, int tabSize, bool insertSpaces)
     {
-      var result = Engine is ICancellableRosaCodeEngine cancellable
-        ? await cancellable.GetCompletionDescription(code, line, column, completionId, cancellationToken)
-        : await Engine.GetCompletionDescription(code, line, column, completionId);
+      var result = await Engine.GetFormattedDocument(code, tabSize, insertSpaces);
 
-      cancellationToken.ThrowIfCancellationRequested();
-      return result ?? string.Empty;
-    }
-
-    private async Task<string> GetFormatAsync(string code, int tabSize, bool insertSpaces, CancellationToken cancellationToken)
-    {
-      var result = Engine is ICancellableRosaCodeEngine cancellable
-        ? await cancellable.GetFormattedDocument(code, tabSize, insertSpaces, cancellationToken)
-        : await Engine.GetFormattedDocument(code, tabSize, insertSpaces);
-
-      cancellationToken.ThrowIfCancellationRequested();
       return result;
     }
 
-    private async Task<IReadOnlyList<ActionEdit>> GetFormatRangeAsync(string code, FormatRangeRequest request, CancellationToken cancellationToken)
+    private async Task<string> GetHoverAsync(string code, int line, int column)
     {
-      var result = Engine is ICancellableRosaCodeEngine cancellable
-        ? await cancellable.GetFormattedRange(code, request.StartLine, request.StartColumn, request.EndLine, request.EndColumn, request.TabSize, request.InsertSpaces, cancellationToken)
-        : await Engine.GetFormattedRange(code, request.StartLine, request.StartColumn, request.EndLine, request.EndColumn, request.TabSize, request.InsertSpaces);
+      var result = await Engine.GetTooltip(code, line, column);
 
-      cancellationToken.ThrowIfCancellationRequested();
       return result;
     }
 
-    private async Task<string> GetHoverAsync(string code, int line, int column, CancellationToken cancellationToken)
-    {
-      var result = Engine is ICancellableRosaCodeEngine cancellable
-        ? await cancellable.GetTooltip(code, line, column, cancellationToken)
-        : await Engine.GetTooltip(code, line, column);
-
-      cancellationToken.ThrowIfCancellationRequested();
-      return result ?? string.Empty;
-    }
-
-    private async Task<DiagnosticsResponse> GetDiagnosticsAsync(string code, CancellationToken cancellationToken)
+    private async Task<DiagnosticsResponse> GetDiagnosticsAsync(string code)
     {
       HandleInternalTextChanged(code);
 
-      var diagnostics = Engine is ICancellableRosaCodeEngine cancellable
-        ? await cancellable.GetDiagnostics(code, cancellationToken)
-        : await Engine.GetDiagnostics(code);
-
-      cancellationToken.ThrowIfCancellationRequested();
+      var diagnostics = await Engine.GetDiagnostics(code);
 
       var result = new DiagnosticsResponse();
       foreach (var diagnostic in diagnostics)
@@ -425,26 +203,19 @@ namespace Lakerfield.RosaCode
         result.Errors.Add(new DiagnosticItem()
         {
           Severity = diagnostic.Severity,
-          Message = diagnostic.Message,
+          Message = $"{diagnostic.Message.Replace("\"", "\\\"")}",
           StartLineNumber = diagnostic.StartLineNumber,
           StartColumn = diagnostic.StartColumn,
           EndLineNumber = diagnostic.EndLineNumber,
           EndColumn = diagnostic.EndColumn,
-          Id = diagnostic.Id,
-          HelpLink = diagnostic.HelpLink,
-          Tags = diagnostic.Tags,
         });
       }
       return result;
     }
 
-    private async Task<SignatureHelpResponse> GetSignaturesAsync(string code, int line, int column, CancellationToken cancellationToken)
+    private async Task<SignatureHelpResponse> GetSignaturesAsync(string code, int line, int column)
     {
-      var (signatures, activeSignature, activeParameter) = Engine is ICancellableRosaCodeEngine cancellable
-        ? await cancellable.GetSignatures(code, line, column, cancellationToken)
-        : await Engine.GetSignatures(code, line, column);
-
-      cancellationToken.ThrowIfCancellationRequested();
+      var (signatures, activeSignature, activeParameter) = await Engine.GetSignatures(code, line, column);
 
       return new SignatureHelpResponse()
       {
@@ -456,11 +227,15 @@ namespace Lakerfield.RosaCode
 
 
 
+
+
+    private void PostWebMessage(string method, string data)
+    {
+      PostWebMessage(method, data);
+    }
+
     private void PostWebMessage(int messageId, string method, string data)
     {
-      if (webView?.CoreWebView2 == null)
-        return;
-
       var json = Serialize(new WebMessage
       {
         Id = messageId,
@@ -489,9 +264,7 @@ namespace Lakerfield.RosaCode
     {
       var assembly = Assembly.GetExecutingAssembly();
 
-      const string resourceName = "Lakerfield.RosaCode.Resources.RosaCodeEditor.html";
-      using Stream stream = assembly.GetManifestResourceStream(resourceName)
-        ?? throw new InvalidOperationException($"Embedded resource '{resourceName}' not found in {assembly.GetName().Name}");
+      using Stream stream = assembly.GetManifestResourceStream("Lakerfield.RosaCode.Resources.RosaCodeEditor.html");
       using StreamReader reader = new StreamReader(stream);
 
       return reader.ReadToEnd();

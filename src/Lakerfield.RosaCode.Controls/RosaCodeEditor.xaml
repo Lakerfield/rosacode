@@ -8,6 +8,6 @@
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800">
   
-  <wv2:WebView2 Grid.Row="1" x:Name="webView" Source="about:blank" WebMessageReceived="WebViewWebMessageReceived" />
+  <wv2:WebView2 Grid.Row="1" x:Name="webView" Source="about:blank" WebMessageReceived="WebViewWebMessageReceived" NavigationCompleted="WebViewNavigationCompleted" />
   
 </UserControl>

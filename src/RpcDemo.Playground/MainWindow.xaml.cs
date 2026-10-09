@@ -39,19 +39,7 @@ namespace RpcDemo.Playground
 
       var engine = new RpcRosaCodeEngineClient(new NetworkClient(new Uri("ws://localhost:5000/ws")));
 
-      InitializeEditorAsync(engine);
-    }
-
-    private async void InitializeEditorAsync(IRosaCodeEngine engine)
-    {
-      try
-      {
-        await editor.InitializeEditor(engine);
-      }
-      catch (Exception ex)
-      {
-        MessageBox.Show(this, ex.Message, "Editor initialization failed");
-      }
+      _ = editor.InitializeEditor(engine);
     }
 
     private void ToggleClick(object sender, RoutedEventArgs e)

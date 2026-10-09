@@ -12,8 +12,7 @@ public class ActionRequest
   public string Code { get; set; } = string.Empty;
   public int Line { get; set; }
   public int Column { get; set; }
-  public int EndLine { get; set; }
-  public int EndColumn { get; set; }
+  public IReadOnlyList<ActionDiagnostic> Diagnostics { get; set; } = new List<ActionDiagnostic>();
 }
 
 public class ActionResponse
@@ -47,25 +46,6 @@ public class CompletionRequest
   public int Column { get; set; }
 }
 
-public class CompletionResolveRequest
-{
-  public string Code { get; set; } = string.Empty;
-  public int Line { get; set; }
-  public int Column { get; set; }
-  public int Id { get; set; }
-}
-
-public class CompletionResolveResponse
-{
-  public string Documentation { get; set; } = string.Empty;
-}
-
-// Cancel a request that is still running; Id is the id of that request
-public class CancelRequest
-{
-  public int Id { get; set; }
-}
-
 public class CompletionResponse
 {
   public List<CompletionItem> Suggestions { get; set; } = new();
@@ -86,22 +66,6 @@ public class FormatRequest
   public string Code { get; set; } = string.Empty;
   public int TabSize { get; set; }
   public bool InsertSpaces { get; set; }
-}
-
-public class FormatRangeRequest
-{
-  public string Code { get; set; } = string.Empty;
-  public int StartLine { get; set; }
-  public int StartColumn { get; set; }
-  public int EndLine { get; set; }
-  public int EndColumn { get; set; }
-  public int TabSize { get; set; }
-  public bool InsertSpaces { get; set; }
-}
-
-public class FormatRangeResponse
-{
-  public IReadOnlyList<ActionEdit> Edits { get; set; } = new List<ActionEdit>();
 }
 
 public class FormatResponse
@@ -157,45 +121,3 @@ public class SignatureHelpResponse
 }
 
 
-
-
-
-
-
-// Navigation, rename, outline, highlighting, hints, folding
-public class RenameRequest
-{
-  public string Code { get; set; } = string.Empty;
-  public int Line { get; set; }
-  public int Column { get; set; }
-  public string NewName { get; set; } = string.Empty;
-}
-
-public class RangeRequest
-{
-  public string Code { get; set; } = string.Empty;
-  public int StartLine { get; set; }
-  public int StartColumn { get; set; }
-  public int EndLine { get; set; }
-  public int EndColumn { get; set; }
-}
-
-public class LocationsResponse
-{
-  public IReadOnlyList<SymbolLocation> Locations { get; set; } = new List<SymbolLocation>();
-}
-
-public class SymbolsResponse
-{
-  public IReadOnlyList<DocumentSymbolItem> Symbols { get; set; } = new List<DocumentSymbolItem>();
-}
-
-public class InlayHintsResponse
-{
-  public IReadOnlyList<InlayHintItem> Hints { get; set; } = new List<InlayHintItem>();
-}
-
-public class FoldingResponse
-{
-  public IReadOnlyList<FoldingRangeItem> Ranges { get; set; } = new List<FoldingRangeItem>();
-}
