@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>RosaCode editor</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.2/min/vs/loader.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.57.0/min/vs/loader.min.js"></script>
   <style>
     html,
     body {
@@ -15,8 +15,14 @@
     }
 
     #editor {
-          flex-grow: 1;
-          border: 1px solid #ccc;
+      flex-grow: 1;
+      border: 1px solid #ccc;
+    }
+
+    #loadError {
+      padding: 12px;
+      font-family: sans-serif;
+      color: #a00;
     }
   </style>
 </head>
@@ -24,89 +30,172 @@
   <div id="editor"></div>
 
   <script>
+    const MONACO_PATH = "https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.57.0/min/vs";
+
     let messageCounter = 1;
     const openCalls = [];
 
+    // Calls this page cancelled: WPF may already have answered, that late answer is not an error
+    const cancelledCalls = new Set();
+
     let _originalModel = undefined;
     let _sourceModel = undefined;
-
     let _currentEditor = undefined;
 
-    let callWpf = async function (method, data) {
+    // Settings pushed from WPF (setTheme / setOptions); re-applied whenever the editor is recreated.
+    let _theme = "vs-dark";
+    // The defaults: Roslyn formats what is typed and pasted (with the range formatting of the page), and names things by what they are.
+    let _editorOptions = { formatOnType: true, formatOnPaste: true, "semanticHighlighting.enabled": true };
+
+    // How long the text has to stay unchanged before it is checked for errors
+    let _diagnosticsDelay = 1000;
+
+    // "vs" and "vs-dark" are the themes of Monaco with the colours for what a name stands for added (see defineThemes)
+    const resolveTheme = (name) => name === "vs-dark" ? "rosa-dark" : name === "vs" ? "rosa-light" : name;
+
+    const cancelledError = () => {
+      const error = new Error("Canceled");
+      error.name = "Canceled"; // the name Monaco itself uses
+      return error;
+    };
+
+    // Request/response call to WPF. Rejects when WPF answers with an "error" message.
+    // With a cancellation token, WPF is told to stop the work as soon as the token is cancelled
+    // (Monaco cancels the requests that the user has moved on from), and the call rejects as cancelled.
+    const callWpf = function (method, data, token) {
       const messageId = messageCounter++;
 
-      const messagePromise = new Promise((resolve, reject) => {
-        const messageCall = { id: messageId, resolve, reject };
-        openCalls.push(messageCall);
+      return new Promise((resolve, reject) => {
+        if (token && token.isCancellationRequested) {
+          reject(cancelledError());
+          return;
+        }
+
+        openCalls.push({ id: messageId, resolve, reject });
+
+        if (token) {
+          token.onCancellationRequested(() => {
+            const index = openCalls.findIndex((call) => call.id === messageId);
+            if (index === -1)
+              return; // already answered
+
+            openCalls.splice(index, 1);
+            if (cancelledCalls.size > 1000) cancelledCalls.clear(); // answers that never come
+            cancelledCalls.add(messageId);
+            notifyWpf("cancel", { id: messageId });
+            reject(cancelledError());
+          });
+        }
+
         window.chrome.webview.postMessage({ id: messageId, method, json: JSON.stringify(data) });
       });
+    };
 
-      return messagePromise;
+    // One-way message to WPF, no answer expected.
+    const notifyWpf = function (method, data) {
+      window.chrome.webview.postMessage({ id: 0, method, json: JSON.stringify(data) });
+    };
+
+    // Providers must never throw into Monaco: log and fall back to an empty result.
+    const safely = async function (name, fallback, action) {
+      try {
+        return await action();
+      } catch (error) {
+        if (error?.name !== "Canceled") // cancelling is normal while typing
+          console.error(`${name} failed`, error);
+        return fallback;
+      }
     };
 
     window.chrome.webview.addEventListener("message", (event) => {
-      const message = event.data; //messageId, method, json
-      let jsonObject = JSON.parse(message.json);
+      const message = event.data; // { id, method, json }
+      const jsonObject = JSON.parse(message.json);
       if (message.id < 0) {
         handleMessage(message.method, jsonObject);
         return;
       }
 
-      // Find the corresponding call by messageId
-      let callIndex = openCalls.findIndex((call) => call.id === message.id);
+      const callIndex = openCalls.findIndex((call) => call.id === message.id);
       if (callIndex !== -1) {
-        let call = openCalls[callIndex];
+        const call = openCalls[callIndex];
         openCalls.splice(callIndex, 1);
-        call.resolve(jsonObject);
+        if (message.method === "error")
+          call.reject(new Error(jsonObject));
+        else
+          call.resolve(jsonObject);
         return;
       }
+
+      if (cancelledCalls.delete(message.id))
+        return;
 
       console.error("unhandled message", message.method, message, event);
     });
 
-    let handleMessage = async function (method, data) {
-      if (method == "setCode") {
-        _originalModel.setValue(data);
-        _sourceModel.setValue(data);
-      }
+    const handleMessage = function (method, data) {
+      switch (method) {
+        case "setCode":
+          _originalModel.setValue(data);
+          _sourceModel.setValue(data);
+          break;
 
-      if (method == "getCode") {
-        let code = _sourceModel.getValue();
-        // post to server
-      }
+        case "setOriginalCode": // left side of the diff editor
+          _originalModel.setValue(data);
+          break;
 
-      if (method == "setMode") {
-        updateEditorMode(data);
-      }
-      };
+        case "setMode":
+          updateEditorMode(data);
+          break;
 
-    let updateEditorMode = async function (mode) {
-      let editor = _currentEditor;
-      if (editor)
-        editor.dispose();
+        case "setTheme":
+          _theme = data || "vs-dark";
+          monaco.editor.setTheme(resolveTheme(_theme));
+          // Semantic tokens that Monaco already has keep the colours of the previous theme until they are asked for again (the next edit).
+          // Set the theme before the code, as the control does, and the colours are those of the theme.
+          break;
+
+        case "setDiagnosticsDelay":
+          _diagnosticsDelay = Math.max(0, Number(data) || 0);
+          break;
+
+        case "setOptions": // any Monaco editor option, e.g. { readOnly: true, fontSize: 14 }
+          _editorOptions = { ..._editorOptions, ...data };
+          if (_currentEditor)
+            _currentEditor.updateOptions(data);
+          break;
+
+        default:
+          console.warn("unknown message from WPF", method);
+      }
+    };
+
+    const updateEditorMode = function (mode) {
+      if (_currentEditor)
+        _currentEditor.dispose();
 
       let container = document.getElementById("editor");
       // recreate node, to avoid duplicate event handlers when changing modes (navigation keys)
       const cleanContainer = container.cloneNode(false);
       container.parentNode.replaceChild(cleanContainer, container);
       container = cleanContainer;
+
+      let editor;
       if (mode != 1) {
-        // create normal editor
         editor = monaco.editor.create(container, {
+          ..._editorOptions,
           model: _sourceModel,
-          theme: "vs-dark"
+          theme: resolveTheme(_theme),
+          automaticLayout: true,
         });
       }
       else {
-        // create diff editor
         editor = monaco.editor.createDiffEditor(container, {
           renderSideBySide: true,
-          readOnly: false,
           originalEditable: false,
-          modifiedEditable: true,
+          diffWordWrap: "on",
+          ..._editorOptions,
           automaticLayout: true,
-          theme: 'vs-dark',
-          diffWordWrap: 'on'
+          theme: resolveTheme(_theme),
         });
         editor.setModel({
           original: _originalModel,
@@ -115,321 +204,559 @@
       }
 
       _currentEditor = editor;
-    }
+    };
 
-    //https://microsoft.github.io/monaco-editor/docs.html
-    require.config({ paths: { vs: "https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.2/min/vs" } });
+    // https://microsoft.github.io/monaco-editor/docs.html
+    require.config({ paths: { vs: MONACO_PATH } });
+
+    require.onError = function (error) {
+      console.error("Monaco failed to load", error);
+      const container = document.getElementById("editor");
+      container.innerHTML = '<div id="loadError">The code editor could not be loaded (' + MONACO_PATH + '). Check the network connection.</div>';
+    };
+
+    // What the semantic tokens provider can name; the order is that of the engine, but the page translates by name
+    const semanticLegend = {
+      tokenTypes: ["namespace", "class", "enum", "interface", "struct", "typeParameter", "parameter", "variable", "property", "event", "enumMember", "method"],
+      tokenModifiers: ["static", "readonly"],
+    };
+
+    // The themes of Monaco do not colour semantic tokens: add colours for what a name stands for (as in Visual Studio)
+    const defineThemes = () => {
+      const colours = (c) => [
+        { token: "namespace", foreground: c.type },
+        { token: "class", foreground: c.type },
+        { token: "struct", foreground: c.type },
+        { token: "enum", foreground: c.type },
+        { token: "interface", foreground: c.interface },
+        { token: "typeParameter", foreground: c.type },
+        { token: "method", foreground: c.method },
+        { token: "parameter", foreground: c.variable },
+        { token: "variable", foreground: c.variable },
+        { token: "variable.readonly", foreground: c.constant },
+        { token: "enumMember", foreground: c.constant },
+        { token: "property", foreground: c.property },
+        { token: "event", foreground: c.property },
+      ];
+
+      monaco.editor.defineTheme("rosa-dark", {
+        base: "vs-dark",
+        inherit: true,
+        colors: {},
+        rules: colours({ type: "4EC9B0", interface: "B8D7A3", method: "DCDCAA", variable: "9CDCFE", constant: "4FC1FF", property: "D4D4D4" }),
+      });
+
+      monaco.editor.defineTheme("rosa-light", {
+        base: "vs",
+        inherit: true,
+        colors: {},
+        rules: colours({ type: "2B91AF", interface: "2B91AF", method: "74531F", variable: "1F377F", constant: "0070C1", property: "000000" }),
+      });
+    };
 
     require(["vs/editor/editor.main"], function () {
-      monaco.editor.onDidCreateEditor((editorInstance) => {
-          //console.log("Monaco Editor has been initialized", editorInstance);
-      });
-
       _originalModel = monaco.editor.createModel("", "csharp");
-      _originalModel.updateOptions({
-        tabSize: 2,
-        insertSpaces: true
-      });
-
       _sourceModel = monaco.editor.createModel("", "csharp");
-      _sourceModel.updateOptions({
-        tabSize: 2,
-        insertSpaces: true
-      });
+      for (const model of [_originalModel, _sourceModel])
+        model.updateOptions({ tabSize: 2, insertSpaces: true });
 
+      defineThemes();
       updateEditorMode();
 
-      window.addEventListener("resize", () => {
-        _currentEditor.layout();
-      });
+      // Roslyn completion kind -> Monaco CompletionItemKind (anything else becomes "Text")
+      const completionKinds = {
+        Namespace: "Module",
+        Structure: "Struct",
+        Struct: "Struct",
+        Class: "Class",
+        Interface: "Interface",
+        Enum: "Enum",
+        Delegate: "Function",
+        ExtensionMethod: "Function",
+        Method: "Method",
+        Property: "Property",
+        Field: "Field",
+        Event: "Event",
+        Parameter: "Variable",
+        Local: "Variable",
+        ArrayType: "Variable",
+        DynamicType: "Variable",
+        PointerType: "Variable",
+        RangeVariable: "Variable",
+        TypeParameter: "TypeParameter",
+        Constant: "Constant",
+        EnumMember: "EnumMember",
+        Keyword: "Keyword",
+        Label: "Reference",
+        Constructor: "Constructor",
+        Snippet: "Snippet",
+      };
 
-      // ✅ Code Completion
+      // Code completion
       monaco.languages.registerCompletionItemProvider("csharp", {
         triggerCharacters: ["."],
-        provideCompletionItems: async function (model, position) {
-          let serverSuggestions = await callWpf("completion", {
-            code: JSON.stringify(model.getValue()),
+        provideCompletionItems: (model, position, context, token) => safely("completion", { suggestions: [] }, async () => {
+          const code = JSON.stringify(model.getValue());
+          const serverSuggestions = await callWpf("completion", {
+            code,
             line: position.lineNumber,
             column: position.column,
-          });
+          }, token);
 
-          let suggestions = serverSuggestions.reduce((acc, item) => {
-            let rawKind = item.kind;
-            // Remap Roslyn kinds to Monaco kinds
-            switch (rawKind) {
-              case "Namespace":
-                rawKind = "Module"; // Namespace as a module
-                break;
+          if (token.isCancellationRequested)
+            return { suggestions: [] };
 
-              case "Structure":
-              case "Struct":
-                rawKind = "Struct"; // Structs
-                break;
-
-              case "Class":
-                rawKind = "Class"; // Classes
-                break;
-
-              case "Interface":
-                rawKind = "Interface"; // Interfaces
-                break;
-
-              case "Enum":
-                rawKind = "Enum"; // Enums
-                break;
-
-              case "Delegate":
-              case "ExtensionMethod":
-                rawKind = "Function"; // Delegates as function types
-                break;
-
-              case "Method":
-                rawKind = "Method"; // Methods
-                break;
-
-              case "Property":
-                rawKind = "Property"; // Properties
-                break;
-
-              case "Field":
-                rawKind = "Field"; // Fields
-                break;
-
-              case "Event":
-                rawKind = "Event"; // Events
-                break;
-
-              case "Parameter":
-              case "Local":
-              case "ArrayType":
-              case "DynamicType":
-              case "PointerType":
-              case "RangeVariable":
-                rawKind = "Variable"; // Parameters, local variables, and other variable-like types
-                break;
-
-              case "TypeParameter":
-                rawKind = "TypeParameter"; // Generic type parameters
-                break;
-
-              case "Constant":
-                rawKind = "Constant"; // Constants
-                break;
-
-              case "EnumMember":
-                rawKind = "EnumMember"; // Enum members
-                break;
-
-              case "Keyword":
-                rawKind = "Keyword"; // C# keywords
-                break;
-
-              case "Label":
-                rawKind = "Reference"; // Labels (e.g., goto targets)
-                break;
-
-              case "Constructor":
-                rawKind = "Constructor"; // Constructors
-                break;
-
-              case "Snippet": // Explicitly handle Snippet from backend
-                rawKind = "Snippet";
-                break;
-
-              default:
-                console.log("fallback to text", rawKind);
-                rawKind = "Text"; // Fallback for unrecognized kinds
-                break;
-            }
-
-            let kind = monaco.languages.CompletionItemKind[rawKind];
-            if (kind === undefined) {
-              console.log("undefined", item);
-              return acc;
-            }
-
-            acc.push({
-              label: item.label,
-              kind: kind,
-              insertText: item.insertText,
-              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-              documentation: item.documentation,
-              detail: item.tags && item.tags.includes("Snippet") ? "(snippet)" : undefined,
-            });
-
-            return acc;
-          }, []);
-
-          return {
-            suggestions: suggestions,
-          };
-        },
-      });
-
-      // Register CodeActionProvider
-      monaco.languages.registerCodeActionProvider("csharp", {
-        provideCodeActions: async function (model, range, context, token) {
-          const position = range.getStartPosition();
-          const markers = monaco.editor.getModelMarkers({ resource: model.uri });
-          const diagnostics = markers.map((m) => ({
-            message: m.message,
-            startLineNumber: m.startLineNumber,
-            startColumn: m.startColumn,
-            endLineNumber: m.endLineNumber,
-            endColumn: m.endColumn,
-            severity: monaco.MarkerSeverity.toString(m.severity).toLowerCase(),
+          const suggestions = serverSuggestions.map((item) => ({
+            label: item.inlineDescription ? { label: item.label, description: item.inlineDescription } : item.label,
+            kind: monaco.languages.CompletionItemKind[completionKinds[item.kind] ?? "Text"],
+            insertText: item.insertText,
+            filterText: item.filterText || undefined,
+            sortText: item.sortText || undefined, // the order Roslyn wants, instead of sorting on the label
+            preselect: item.preselect,
+            commitCharacters: item.commitCharacters ? Array.from(item.commitCharacters) : undefined,
+            // items that insert more than their name (override, partial) replace what Roslyn says, not the word at the cursor
+            range: item.replaceRange
+              ? new monaco.Range(item.replaceRange.startLineNumber, item.replaceRange.startColumn, item.replaceRange.endLineNumber, item.replaceRange.endColumn)
+              : undefined,
+            // what resolveCompletionItem needs to ask for the documentation of this item
+            _rosa: { id: item.id, code, line: position.lineNumber, column: position.column },
           }));
 
-          let serverActions = await callWpf("action", {
-            code: JSON.stringify(model.getValue()),
-            line: position.lineNumber,
-            column: position.column,
-            diagnostics: diagnostics,
-          });
+          return { suggestions };
+        }),
 
-          const monacoActions = serverActions.actions.map((action) => ({
+        // The documentation of an item is only asked for when the item is selected in the list
+        resolveCompletionItem: (item, token) => safely("completion documentation", item, async () => {
+          if (!item._rosa)
+            return item;
+
+          const { id, code, line, column } = item._rosa;
+          const resolved = await callWpf("completionResolve", { code, line, column, id }, token);
+          if (resolved.documentation)
+            item.documentation = { value: resolved.documentation };
+
+          return item;
+        }),
+      });
+
+      // Code actions (quick fixes)
+      monaco.languages.registerCodeActionProvider("csharp", {
+        provideCodeActions: (model, range, context, token) => safely("code action", { actions: [], dispose: () => { } }, async () => {
+          // The range is the selection (or the cursor): refactorings such as "Extract method" need a selection.
+          // Roslyn works out the diagnostics itself, for the code as it is now.
+          const serverActions = await callWpf("action", {
+            code: JSON.stringify(model.getValue()),
+            line: range.startLineNumber,
+            column: range.startColumn,
+            endLine: range.endLineNumber,
+            endColumn: range.endColumn,
+          }, token);
+
+          if (token.isCancellationRequested)
+            return { actions: [], dispose: () => { } };
+
+          const toRange = (r) => new monaco.Range(r.startLineNumber, r.startColumn, r.endLineNumber, r.endColumn);
+
+          const actions = (serverActions.actions ?? []).map((action) => ({
             title: action.title,
             kind: action.kind,
-            diagnostics: action.diagnostics.map((d) => ({
+            diagnostics: (action.diagnostics ?? []).map((d) => ({
               message: d.message,
-              range: new monaco.Range(d.startLineNumber, d.startColumn, d.endLineNumber, d.endColumn),
-              severity: monaco.MarkerSeverity[d.severity.charAt(0).toUpperCase() + d.severity.slice(1)],
+              ...toRange(d),
+              severity: monaco.MarkerSeverity[d.severity.charAt(0).toUpperCase() + d.severity.slice(1).toLowerCase()],
             })),
             isPreferred: action.isPreferred,
             edit: {
               edits: action.edit.edits.map((edit) => ({
                 resource: model.uri,
-                textEdit: {
-                  range: new monaco.Range(edit.range.startLineNumber, edit.range.startColumn, edit.range.endLineNumber, edit.range.endColumn),
-                  text: edit.text,
-                },
+                textEdit: { range: toRange(edit.range), text: edit.text },
               })),
             },
           }));
 
-          return {
-            actions: monacoActions,
-            dispose: () => { },
-          };
-        },
+          return { actions, dispose: () => { } };
+        }),
       });
 
-      // ✅ Hover Tooltips
+      // Hover tooltips
       monaco.languages.registerHoverProvider("csharp", {
-        provideHover: async function (model, position) {
+        provideHover: (model, position, token) => safely("hover", null, async () => {
           const word = model.getWordAtPosition(position);
           if (!word) return null;
 
-          let serverHover = await callWpf("hover", {
+          const serverHover = await callWpf("hover", {
             code: JSON.stringify(model.getValue()),
             line: position.lineNumber,
             column: position.column,
-          });
+          }, token);
 
-          if (serverHover?.tooltip) {
-            return {
-              range: new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column + word.word.length),
-              contents: [{ value: serverHover.tooltip }],
+          if (token.isCancellationRequested || !serverHover?.tooltip)
+            return null;
+
+          return {
+            range: new monaco.Range(position.lineNumber, word.startColumn, position.lineNumber, word.endColumn),
+            contents: [{ value: serverHover.tooltip }],
+          };
+        }),
+      });
+
+      const toRange = (r) => new monaco.Range(r.startLineNumber, r.startColumn, r.endLineNumber, r.endColumn);
+
+      // Where the code is, for the calls below
+      const positionRequest = (model, position) => ({
+        code: JSON.stringify(model.getValue()),
+        line: position.lineNumber,
+        column: position.column,
+      });
+
+      // Go to definition (ctrl+click, F12): where the symbol is declared in this code. Library symbols have no place here.
+      monaco.languages.registerDefinitionProvider("csharp", {
+        provideDefinition: (model, position, token) => safely("definition", null, async () => {
+          const result = await callWpf("definition", positionRequest(model, position), token);
+          return result.locations.map((location) => ({ uri: model.uri, range: toRange(location.range) }));
+        }),
+      });
+
+      // Find all references (shift+F12), also shown as a peek
+      monaco.languages.registerReferenceProvider("csharp", {
+        provideReferences: (model, position, context, token) => safely("references", null, async () => {
+          const result = await callWpf("references", positionRequest(model, position), token);
+          return result.locations
+            .filter((location) => context.includeDeclaration || !location.isDeclaration)
+            .map((location) => ({ uri: model.uri, range: toRange(location.range) }));
+        }),
+      });
+
+      // Highlight the other uses of the symbol under the cursor; writes in a different shade than reads
+      monaco.languages.registerDocumentHighlightProvider("csharp", {
+        provideDocumentHighlights: (model, position, token) => safely("highlights", null, async () => {
+          const result = await callWpf("references", positionRequest(model, position), token);
+          return result.locations.map((location) => ({
+            range: toRange(location.range),
+            kind: location.isWrite || location.isDeclaration
+              ? monaco.languages.DocumentHighlightKind.Write
+              : monaco.languages.DocumentHighlightKind.Read,
+          }));
+        }),
+      });
+
+      // Rename (F2): Roslyn finds every use, also in other members
+      monaco.languages.registerRenameProvider("csharp", {
+        resolveRenameLocation: (model, position, token) => safely("rename location", undefined, async () => {
+          const info = await callWpf("renameInfo", positionRequest(model, position), token);
+          if (!info.canRename)
+            return { range: new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column), text: "", rejectReason: info.error };
+
+          return { range: toRange(info.range), text: info.text };
+        }),
+
+        provideRenameEdits: (model, position, newName, token) => safely("rename", undefined, async () => {
+          const result = await callWpf("rename", { ...positionRequest(model, position), newName }, token);
+          if (result.error)
+            return { edits: [], rejectReason: result.error };
+
+          return {
+            edits: result.edits.map((edit) => ({
+              resource: model.uri,
+              textEdit: { range: toRange(edit.range), text: edit.text },
+              versionId: undefined,
+            })),
+          };
+        }),
+      });
+
+      // The outline: ctrl+shift+O, the breadcrumbs, and the sticky scroll
+      monaco.languages.registerDocumentSymbolProvider("csharp", {
+        displayName: "RosaCode",
+        provideDocumentSymbols: (model, token) => safely("symbols", [], async () => {
+          const result = await callWpf("symbols", { code: JSON.stringify(model.getValue()) }, token);
+
+          // flat in, a tree out: a symbol points at its parent
+          const byId = new Map();
+          const roots = [];
+          for (const symbol of result.symbols) {
+            const item = {
+              name: symbol.name,
+              detail: symbol.detail,
+              kind: monaco.languages.SymbolKind[symbol.kind] ?? monaco.languages.SymbolKind.Variable,
+              tags: [],
+              range: toRange(symbol.range),
+              selectionRange: toRange(symbol.selectionRange),
+              children: [],
             };
+            byId.set(symbol.id, item);
+            (byId.get(symbol.parentId)?.children ?? roots).push(item);
           }
-          return null;
+          return roots;
+        }),
+      });
+
+      // Colours of the identifiers by what they are (class, method, parameter, ...): from the Roslyn classifier
+      monaco.languages.registerDocumentSemanticTokensProvider("csharp", {
+        getLegend: () => semanticLegend,
+        provideDocumentSemanticTokens: (model, lastResultId, token) => safely("semantic tokens", null, async () => {
+          const result = await callWpf("semanticTokens", { code: JSON.stringify(model.getValue()) }, token);
+
+          // WPF numbers the types and modifiers in its own order: translate by name
+          const typeIndex = result.tokenTypes.map((name) => semanticLegend.tokenTypes.indexOf(name));
+          const modifierIndex = result.tokenModifiers.map((name) => semanticLegend.tokenModifiers.indexOf(name));
+
+          const data = new Uint32Array(result.data.length);
+          for (let i = 0; i < result.data.length; i += 5) {
+            data[i] = result.data[i];
+            data[i + 1] = result.data[i + 1];
+            data[i + 2] = result.data[i + 2];
+            data[i + 3] = Math.max(0, typeIndex[result.data[i + 3]]);
+
+            let modifiers = 0;
+            for (let bit = 0; bit < modifierIndex.length; bit++)
+              if ((result.data[i + 4] & (1 << bit)) !== 0 && modifierIndex[bit] >= 0)
+                modifiers |= 1 << modifierIndex[bit];
+            data[i + 4] = modifiers;
+          }
+
+          return { data };
+        }),
+        releaseDocumentSemanticTokens: () => { },
+      });
+
+      // Hints in the text: the type of a "var" and the name of the parameter in front of a literal argument
+      monaco.languages.registerInlayHintsProvider("csharp", {
+        provideInlayHints: (model, range, token) => safely("inlay hints", { hints: [], dispose: () => { } }, async () => {
+          const result = await callWpf("inlayHints", {
+            code: JSON.stringify(model.getValue()),
+            startLine: range.startLineNumber,
+            startColumn: range.startColumn,
+            endLine: range.endLineNumber,
+            endColumn: range.endColumn,
+          }, token);
+
+          return {
+            hints: result.hints.map((hint) => ({
+              label: hint.label,
+              position: { lineNumber: hint.line, column: hint.column },
+              kind: hint.kind === "Parameter" ? monaco.languages.InlayHintKind.Parameter : monaco.languages.InlayHintKind.Type,
+              paddingLeft: hint.paddingLeft,
+              paddingRight: hint.paddingRight,
+            })),
+            dispose: () => { },
+          };
+        }),
+      });
+
+      // Folding by what the code is (braces, #region, usings, comments) instead of by indentation
+      monaco.languages.registerFoldingRangeProvider("csharp", {
+        provideFoldingRanges: (model, context, token) => safely("folding", null, async () => {
+          const result = await callWpf("folding", { code: JSON.stringify(model.getValue()) }, token);
+
+          return result.ranges.map((range) => ({
+            start: range.startLine,
+            end: range.endLine,
+            kind: range.kind ? monaco.languages.FoldingRangeKind[range.kind] : undefined,
+          }));
+        }),
+      });
+
+      // Colour swatches next to colours in strings: "#RGB", "#ARGB", "#RRGGBB", "#AARRGGBB" (the order of .NET and WPF)
+      const hexColor = /"#([0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})"/g;
+
+      monaco.languages.registerColorProvider("csharp", {
+        provideDocumentColors: (model) => {
+          const colors = [];
+          const lines = model.getLinesContent();
+          for (let i = 0; i < lines.length; i++) {
+            for (const match of lines[i].matchAll(hexColor)) {
+              let hex = match[1];
+              if (hex.length <= 4)
+                hex = [...hex].map((digit) => digit + digit).join(""); // #ARGB -> #AARRGGBB
+              if (hex.length === 6)
+                hex = "ff" + hex;
+
+              const part = (index) => parseInt(hex.substr(index * 2, 2), 16) / 255;
+              const start = match.index + 2; // after the quote and the #
+              colors.push({
+                color: { alpha: part(0), red: part(1), green: part(2), blue: part(3) },
+                range: new monaco.Range(i + 1, start, i + 1, start + match[1].length),
+              });
+            }
+          }
+          return colors;
+        },
+
+        provideColorPresentations: (model, colorInfo) => {
+          const hex = (value) => Math.round(value * 255).toString(16).padStart(2, "0").toUpperCase();
+          const { alpha, red, green, blue } = colorInfo.color;
+          const text = (alpha < 1 ? hex(alpha) : "") + hex(red) + hex(green) + hex(blue);
+
+          return [{ label: "#" + text, textEdit: { range: colorInfo.range, text } }];
         },
       });
 
-      // format document
+      // Format document
       monaco.languages.registerDocumentFormattingEditProvider("csharp", {
-        provideDocumentFormattingEdits: async function (model, options, token) {
-          const originalCode = JSON.stringify(model.getValue());
-          let serverFormat = await callWpf("format", {
-            code: originalCode,
+        provideDocumentFormattingEdits: (model, options, token) => safely("format", [], async () => {
+          const original = model.getValue();
+          const serverFormat = await callWpf("format", {
+            code: JSON.stringify(original),
             tabSize: options.tabSize,
             insertSpaces: options.insertSpaces,
-          });
+          }, token);
 
-          if (token.isCancellationRequested) {
-            return {
-              value: [],
-              dispose: () => { },
-            };
-          }
+          // cancelled, edited in the meantime, or nothing to do
+          if (token.isCancellationRequested || model.getValue() !== original || serverFormat.format === original)
+            return [];
 
-          const edit = {
-            range: model.getFullModelRange(),
-            text: serverFormat.format,
-          };
-
-          model.applyEdits([edit]);
-
-          return {
-            value: [edit],
-            dispose: () => { },
-          };
-        },
+          return [{ range: model.getFullModelRange(), text: serverFormat.format }];
+        }),
       });
 
-      // ✅ Diagnostics (Error Checking)
-      async function updateDiagnostics() {
+      // Format selection
+      monaco.languages.registerDocumentRangeFormattingEditProvider("csharp", {
+        provideDocumentRangeFormattingEdits: (model, range, options, token) => safely("format selection", [], async () => {
+          const original = model.getValue();
+          const serverFormat = await callWpf("formatRange", {
+            code: JSON.stringify(original),
+            startLine: range.startLineNumber,
+            startColumn: range.startColumn,
+            endLine: range.endLineNumber,
+            endColumn: range.endColumn,
+            tabSize: options.tabSize,
+            insertSpaces: options.insertSpaces,
+          }, token);
+
+          // cancelled, or edited in the meantime: the positions no longer fit
+          if (token.isCancellationRequested || model.getValue() !== original)
+            return [];
+
+          return serverFormat.edits.map((edit) => ({
+            range: new monaco.Range(edit.range.startLineNumber, edit.range.startColumn, edit.range.endLineNumber, edit.range.endColumn),
+            text: edit.text,
+          }));
+        }),
+      });
+
+      // Diagnostics (error checking)
+      // The id of a diagnostic (CS0103) links to its help page when there is one
+      const markerCode = (diag) => {
+        if (!diag.id)
+          return undefined;
+
+        try {
+          return diag.helpLink ? { value: diag.id, target: monaco.Uri.parse(diag.helpLink) } : diag.id;
+        } catch {
+          return diag.id;
+        }
+      };
+
+      const mapDiagnostics = (diagnostics) => diagnostics.map((diag) => ({
+        message: diag.message,
+        // Hidden diagnostics only arrive for unused code (an unused using): faded out, without a squiggle
+        severity: diag.severity === "Hint" || diag.severity === "Hidden" ? monaco.MarkerSeverity.Hint :
+                  diag.severity === "Info" ? monaco.MarkerSeverity.Info :
+                  diag.severity === "Warning" ? monaco.MarkerSeverity.Warning :
+                  monaco.MarkerSeverity.Error,
+        tags: diag.tags && diag.tags.includes("Unnecessary") ? [monaco.MarkerTag.Unnecessary] : undefined,
+        code: markerCode(diag),
+        startLineNumber: diag.startLineNumber,
+        startColumn: diag.startColumn,
+        endLineNumber: diag.endLineNumber,
+        endColumn: diag.endColumn,
+      }));
+
+      // The diagnostics run that is waiting for WPF; stopped as soon as the text changes
+      let diagnosticsCancellation = undefined;
+      const cancelDiagnostics = () => {
+        diagnosticsCancellation?.cancel();
+        diagnosticsCancellation?.dispose();
+        diagnosticsCancellation = undefined;
+      };
+
+      // A run that fails (WPF busy, engine restarting) is tried once more a bit later; cancelling is not a failure
+      let retryTimer = undefined;
+
+      const updateDiagnostics = async (isRetry = false) => {
         const model = _sourceModel;
-        let code = _sourceModel.getValue();
-        let serverDiagnostics = await callWpf("diagnostics", {
-          code: JSON.stringify(code),
-        });
+        const version = model.getVersionId();
 
-        monaco.editor.setModelMarkers(model, "owner", mapSeverity(serverDiagnostics.errors));
-        return;
-      }
+        cancelDiagnostics();
+        const cancellation = diagnosticsCancellation = new monaco.CancellationTokenSource();
 
-      function debounce(func, delay) {
-        let timer;
-        return function (...args) {
-          clearTimeout(timer);
-          timer = setTimeout(() => func.apply(this, args), delay);
-        };
+        try {
+          const serverDiagnostics = await callWpf("diagnostics", {
+            code: JSON.stringify(model.getValue()),
+          }, cancellation.token);
+
+          // The text changed while waiting: a newer request is already scheduled.
+          if (model.isDisposed() || model.getVersionId() !== version)
+            return;
+
+          monaco.editor.setModelMarkers(model, "owner", mapDiagnostics(serverDiagnostics.errors));
+        } catch (error) {
+          if (error?.name === "Canceled")
+            return;
+
+          console.error("diagnostics failed", error);
+          if (!isRetry)
+            retryTimer = setTimeout(() => updateDiagnostics(true), 2000);
         }
+      };
 
-        function mapSeverity(diagnostics) {
-            const markers = diagnostics.map(diag => ({
-                message: diag.message,
-                severity: diag.severity === "Hint" ? monaco.MarkerSeverity.Hint :
-                          diag.severity === "Info" ? monaco.MarkerSeverity.Info :
-                          diag.severity === "Warning" || diag.severity === "Hidden" ? monaco.MarkerSeverity.Warning :
-                          monaco.MarkerSeverity.Error,
-                startLineNumber: diag.startLineNumber,
-                startColumn: diag.startColumn,
-                endLineNumber: diag.endLineNumber,
-                endColumn: diag.endColumn
-            }));
-            return markers;
-        }
+      // Checks the text when it has not changed for a while (_diagnosticsDelay, set from WPF)
+      let diagnosticsTimer = undefined;
+      const scheduleDiagnostics = () => {
+        clearTimeout(diagnosticsTimer);
+        clearTimeout(retryTimer);
+        diagnosticsTimer = setTimeout(updateDiagnostics, _diagnosticsDelay);
+      };
 
-      const debouncedUpdateDiagnostics = debounce(updateDiagnostics, 1000);
+      _sourceModel.onDidChangeContent(() => {
+        // Keep the WPF Text binding in sync right away; do not wait for the diagnostics round trip.
+        notifyWpf("textChanged", { code: JSON.stringify(_sourceModel.getValue()) });
+        cancelDiagnostics(); // the run in progress is for text that is already out of date
+        scheduleDiagnostics();
+      });
 
-      _sourceModel.onDidChangeContent(debouncedUpdateDiagnostics); // updateDiagnostics);
-
-      // ✅ Signature Help (Parameter Hints)
-      monaco.languages.registerSignatureHelpProvider("csharp", {
-        signatureHelpTriggerCharacters: ["(", ",", ";"],
-        provideSignatureHelp: async function (model, position, token) {
-          const textUntilPosition = model.getValueInRange({
-            startLineNumber: 1,
+      // Format what is typed: when a statement or a block is finished, the line is put in order (the range formatter of Roslyn)
+      monaco.languages.registerOnTypeFormattingEditProvider("csharp", {
+        autoFormatTriggerCharacters: [";", "}"],
+        provideOnTypeFormattingEdits: (model, position, character, options, token) => safely("format on type", [], async () => {
+          const original = model.getValue();
+          const result = await callWpf("formatRange", {
+            code: JSON.stringify(original),
+            startLine: position.lineNumber,
             startColumn: 1,
-            endLineNumber: position.lineNumber,
-            endColumn: position.column,
-          });
+            endLine: position.lineNumber,
+            endColumn: model.getLineMaxColumn(position.lineNumber),
+            tabSize: options.tabSize,
+            insertSpaces: options.insertSpaces,
+          }, token);
 
-          let serverSignatures = await callWpf("signatures", {
-            code: JSON.stringify(_sourceModel.getValue()),
+          if (token.isCancellationRequested || model.getValue() !== original)
+            return [];
+
+          return result.edits.map((edit) => ({ range: toRange(edit.range), text: edit.text }));
+        }),
+      });
+
+      // Signature help (parameter hints)
+      monaco.languages.registerSignatureHelpProvider("csharp", {
+        signatureHelpTriggerCharacters: ["(", ","],
+        provideSignatureHelp: (model, position, token) => safely("signature help", null, async () => {
+          const serverSignatures = await callWpf("signatures", {
+            code: JSON.stringify(model.getValue()),
             line: position.lineNumber,
             column: position.column,
-          });
-          //console.log(serverSignatures);
+          }, token);
 
-          return {
-            value: serverSignatures,
-            dispose: () => { },
-          };
-        },
+          if (token.isCancellationRequested)
+            return null;
+
+          return { value: serverSignatures, dispose: () => { } };
+        }),
       });
+
+      // Everything is registered: WPF may now send code, mode, theme and options.
+      window.chrome.webview.postMessage({ id: 0, method: "ready", json: "null" });
     });
   </script>
 </body>

@@ -48,6 +48,14 @@ public static partial class RpcRosaCodeEngineBsonConfigurator
     Lakerfield.Bson.Serialization.BsonClassMap.RegisterClassMap<SignatureInformation> (AutoMap);
     Lakerfield.Bson.Serialization.BsonClassMap.RegisterClassMap<ParameterInformation> (AutoMap);
 
+    Lakerfield.Bson.Serialization.BsonClassMap.RegisterClassMap<SymbolLocation> (AutoMap);
+    Lakerfield.Bson.Serialization.BsonClassMap.RegisterClassMap<RenameInfo> (AutoMap);
+    Lakerfield.Bson.Serialization.BsonClassMap.RegisterClassMap<RenameResult> (AutoMap);
+    Lakerfield.Bson.Serialization.BsonClassMap.RegisterClassMap<DocumentSymbolItem> (AutoMap);
+    Lakerfield.Bson.Serialization.BsonClassMap.RegisterClassMap<SemanticTokensResult> (AutoMap);
+    Lakerfield.Bson.Serialization.BsonClassMap.RegisterClassMap<InlayHintItem> (AutoMap);
+    Lakerfield.Bson.Serialization.BsonClassMap.RegisterClassMap<FoldingRangeItem> (AutoMap);
+
 
     //Lakerfield.Bson.Serialization.BsonClassMap.RegisterClassMap<Models.Company>(cm =>
     //{
